@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   AlertTriangle,
-  TrendingUp,
   Users,
   Building,
   MapPin,
@@ -10,30 +9,19 @@ import {
   Droplets,
   Wind,
   Thermometer,
-  Eye,
-  Navigation,
   ChevronRight,
   ArrowUpRight,
   Activity,
   Shield,
   Clock,
-  Zap,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import {
-  mockDashboardStats,
-  mockWeatherData,
-  mockPredictions,
-  mockAlerts,
-  mockShelters,
-  mockReports,
-} from '../data/mockData';
+import { mockWeatherData } from '../data/mockData';
 import {
   getRiskColor,
   getRiskBadgeClass,
   formatNumber,
   formatRelativeTime,
-  getAlertSeverityColor,
 } from '../utils/helpers';
 import { Link } from 'react-router-dom';
 import {
@@ -44,9 +32,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  Cell,
 } from 'recharts';
 
 // Animated counter hook
@@ -110,15 +95,33 @@ const rainfallData = [
   { time: '12AM', actual: null, predicted: 65 },
   { time: '3AM', actual: null, predicted: 45 },
 ];
-
 export default function CitizenDashboard() {
-  const stats = mockDashboardStats;
-  const weather = mockWeatherData;
-  const topPredictions = mockPredictions.slice(0, 4);
-  const recentAlerts = mockAlerts.slice(0, 3);
-  const nearbyShelters = mockShelters.slice(0, 3);
-  const recentReports = mockReports.slice(0, 4);
+  const {
+    predictions,
+    alerts,
+    shelters,
+    reports,
+    stats,
+    fetchPredictions,
+    fetchAlerts,
+    fetchShelters,
+    fetchReports,
+    fetchStats
+  } = useAppStore();
 
+  useEffect(() => {
+    fetchPredictions();
+    fetchAlerts();
+    fetchShelters();
+    fetchReports();
+    fetchStats();
+  }, []);
+
+  const weather = mockWeatherData;
+  const topPredictions = predictions.slice(0, 4);
+  const recentAlerts = alerts.slice(0, 3);
+  const nearbyShelters = shelters.slice(0, 3);
+  const recentReports = reports.slice(0, 4);
   const animatedAlerts = useAnimatedCounter(stats.activeAlerts);
   const animatedPopulation = useAnimatedCounter(stats.populationAffected);
   const animatedShelters = useAnimatedCounter(stats.sheltersActive);
@@ -361,7 +364,7 @@ export default function CitizenDashboard() {
             <div className="mt-4 pt-4 border-t border-white/5">
               <p className="text-xs text-slate-500 mb-2">5-Day Forecast</p>
               <div className="flex justify-between">
-                {weather.forecast.map((day) => (
+                {weather.forecast.map((day: any) => (
                   <div key={day.date} className="text-center">
                     <p className="text-[10px] text-slate-500">{new Date(day.date).toLocaleDateString('en', { weekday: 'short' })}</p>
                     <p className="text-lg my-1">{day.icon}</p>
@@ -376,7 +379,7 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-white">Nearby Shelters</h3>
-              <Link to="/app/map" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+              <Link to="/app/shelters" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
                 View All <ChevronRight size={14} />
               </Link>
             </div>
@@ -424,7 +427,12 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-white">Recent Reports</h3>
-              <span className="badge badge-info">{mockReports.length} total</span>
+              <div className="flex items-center gap-2">
+                <span className="badge badge-info">{reports.length} total</span>
+                <Link to="/app/citizen/report" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                  + Submit <ChevronRight size={12} />
+                </Link>
+              </div>
             </div>
             <div className="space-y-2.5">
               {recentReports.map((report) => (

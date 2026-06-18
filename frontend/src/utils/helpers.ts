@@ -28,6 +28,7 @@ export function getRiskBadgeClass(level: string): string {
 
 export function getAlertSeverityColor(severity: string): string {
   switch (severity) {
+    case 'extreme': return '#dc2626';
     case 'critical': return '#ef4444';
     case 'severe': return '#f59e0b';
     case 'moderate': return '#06b6d4';

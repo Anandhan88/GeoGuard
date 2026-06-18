@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Mail, Lock, ArrowRight, Eye, EyeOff, User, Phone } from 'lucide-react';
+import { Shield, Mail, Lock, ArrowRight, Eye, EyeOff, User } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 
 export default function LoginPage() {
@@ -12,18 +12,28 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [role, setRole] = useState<'citizen' | 'authority'>('citizen');
   const navigate = useNavigate();
-  const login = useAppStore((s) => s.login);
+  const signIn = useAppStore((s) => s.signIn);
+  const signUp = useAppStore((s) => s.signUp);
+  const isLoading = useAppStore((s) => s.isLoading);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login({
-      id: 'user-001',
-      email: email || 'demo@geoguard.ai',
-      name: name || 'Demo User',
-      role: role,
-      languagePref: 'en',
-    });
-    navigate('/app');
+    setErrorMsg('');
+    try {
+      if (isLogin) {
+        await signIn(email || 'citizen@demo.com', password || 'demo123');
+      } else {
+        if (!email || !password || !name) {
+          setErrorMsg('All fields are required');
+          return;
+        }
+        await signUp(email, password, name, role);
+      }
+      navigate('/app');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Operation failed. Please try again.');
+    }
   };
 
   return (
@@ -158,13 +168,20 @@ export default function LoginPage() {
               </div>
             )}
 
+            {errorMsg && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                {errorMsg}
+              </div>
+            )}
+
             <button
               type="submit"
-              className="btn-primary w-full justify-center py-3 text-base"
+              className="btn-primary w-full justify-center py-3 text-base flex items-center"
               id="login-submit"
+              disabled={isLoading}
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
-              <ArrowRight size={18} />
+              {isLoading ? 'Processing...' : isLogin ? 'Sign In' : 'Create Account'}
+              {!isLoading && <ArrowRight size={18} />}
             </button>
           </form>
 
@@ -173,20 +190,34 @@ export default function LoginPage() {
             <p className="text-xs text-slate-500 text-center mb-3">Quick Demo Access</p>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => {
-                  login({ id: 'demo-citizen', email: 'citizen@demo.com', name: 'Rajesh Kumar', role: 'citizen', languagePref: 'en' });
-                  navigate('/app');
+                type="button"
+                onClick={async () => {
+                  setErrorMsg('');
+                  try {
+                    await signIn('citizen@demo.com', 'demo123');
+                    navigate('/app');
+                  } catch (err: any) {
+                    setErrorMsg(err.message);
+                  }
                 }}
                 className="btn-secondary text-xs py-2 justify-center"
+                disabled={isLoading}
               >
                 👤 Citizen Demo
               </button>
               <button
-                onClick={() => {
-                  login({ id: 'demo-authority', email: 'authority@demo.com', name: 'Dr. Priya IAS', role: 'authority', languagePref: 'en' });
-                  navigate('/app');
+                type="button"
+                onClick={async () => {
+                  setErrorMsg('');
+                  try {
+                    await signIn('authority@demo.com', 'demo123');
+                    navigate('/app');
+                  } catch (err: any) {
+                    setErrorMsg(err.message);
+                  }
                 }}
                 className="btn-secondary text-xs py-2 justify-center"
+                disabled={isLoading}
               >
                 🛡️ Authority Demo
               </button>

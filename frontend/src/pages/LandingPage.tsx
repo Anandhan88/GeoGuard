@@ -12,7 +12,6 @@ import {
   Satellite,
   MessageSquare,
   Radio,
-  ChevronRight,
   Zap,
   Globe,
   Eye,

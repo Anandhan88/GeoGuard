@@ -8,6 +8,12 @@ import AuthorityDashboard from './pages/AuthorityDashboard';
 import MapView from './pages/MapView';
 import AlertsPage from './pages/AlertsPage';
 import PredictionDetail from './pages/PredictionDetail';
+import ReportPage from './pages/ReportPage';
+import SheltersPage from './pages/SheltersPage';
+import AIAssistantPage from './pages/AIAssistantPage';
+import EvacuationPage from './pages/EvacuationPage';
+import SatellitePage from './pages/SatellitePage';
+import WeatherPage from './pages/WeatherPage';
 import './index.css';
 
 function App() {
@@ -31,9 +37,15 @@ function App() {
         <Route path="/app" element={<DashboardLayout />}>
           <Route index element={<CitizenDashboard />} />
           <Route path="citizen" element={<CitizenDashboard />} />
+          <Route path="citizen/report" element={<ReportPage />} />
           <Route path="authority" element={<AuthorityDashboard />} />
           <Route path="map" element={<MapView />} />
           <Route path="alerts" element={<AlertsPage />} />
+          <Route path="shelters" element={<SheltersPage />} />
+          <Route path="evacuation" element={<EvacuationPage />} />
+          <Route path="assistant" element={<AIAssistantPage />} />
+          <Route path="satellite" element={<SatellitePage />} />
+          <Route path="weather" element={<WeatherPage />} />
           <Route path="prediction/:id" element={<PredictionDetail />} />
         </Route>
       </Routes>

@@ -1,20 +1,16 @@
 """
 GeoGuard AI - Shelters API
 """
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, HTTPException
 from typing import Optional
 import math
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.models.models import Shelter
 
 router = APIRouter()
-
-SHELTERS = [
-    {"id": "shelter-001", "name": "Anna University Convention Centre", "type": "government", "capacity": 500, "current_occupancy": 187, "amenities": ["Water", "Food", "Medical Aid", "Blankets", "Charging Points"], "contact": "+91-44-2235-8888", "location": {"lat": 13.0127, "lng": 80.2352}, "address": "Anna University Campus, Guindy", "is_open": True},
-    {"id": "shelter-002", "name": "Govt Higher Secondary School - Adyar", "type": "school", "capacity": 300, "current_occupancy": 245, "amenities": ["Water", "Food", "Blankets"], "contact": "+91-44-2441-5500", "location": {"lat": 13.0060, "lng": 80.2570}, "address": "Gandhi Nagar, Adyar", "is_open": True},
-    {"id": "shelter-003", "name": "Velachery Community Hall", "type": "community_hall", "capacity": 200, "current_occupancy": 198, "amenities": ["Water", "Food", "Medical Aid"], "contact": "+91-44-2243-7700", "location": {"lat": 12.9840, "lng": 80.2190}, "address": "Velachery Main Road", "is_open": True},
-    {"id": "shelter-004", "name": "Kapaleeshwarar Temple Hall", "type": "temple", "capacity": 150, "current_occupancy": 42, "amenities": ["Water", "Food", "Blankets", "First Aid"], "contact": "+91-44-2464-1670", "location": {"lat": 13.0339, "lng": 80.2697}, "address": "Mylapore", "is_open": True},
-    {"id": "shelter-005", "name": "YMCA Nandanam Sports Complex", "type": "stadium", "capacity": 800, "current_occupancy": 310, "amenities": ["Water", "Food", "Medical Aid", "Blankets", "Charging Points", "Toilets"], "contact": "+91-44-2432-0700", "location": {"lat": 13.0300, "lng": 80.2400}, "address": "Nandanam", "is_open": True},
-    {"id": "shelter-006", "name": "Tambaram Municipality Hall", "type": "government", "capacity": 250, "current_occupancy": 75, "amenities": ["Water", "Food", "Medical Aid", "Blankets"], "contact": "+91-44-2226-3300", "location": {"lat": 12.9260, "lng": 80.1020}, "address": "Tambaram East", "is_open": True},
-]
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -32,41 +28,122 @@ async def find_nearby_shelters(
     lng: float = Query(..., description="User longitude"),
     max_distance_km: float = Query(10, description="Maximum distance in km"),
     limit: int = Query(5),
+    db: AsyncSession = Depends(get_db)
 ):
     """Find nearest shelters with distance calculation."""
-    shelters_with_distance = []
-    for s in SHELTERS:
-        if not s["is_open"]:
-            continue
-        dist = haversine(lat, lng, s["location"]["lat"], s["location"]["lng"])
-        if dist <= max_distance_km:
-            shelters_with_distance.append({**s, "distance_km": round(dist, 2)})
+    query = select(Shelter)
+    result = await db.execute(query)
+    shelters = result.scalars().all()
     
+    shelters_with_distance = []
+    for s in shelters:
+        s_lat = s.latitude if hasattr(s, 'latitude') else 13.0
+        s_lng = s.longitude if hasattr(s, 'longitude') else 80.0
+        dist = haversine(lat, lng, s_lat, s_lng)
+        if dist <= max_distance_km:
+            shelters_with_distance.append({
+                "id": s.id,
+                "name": s.name,
+                "type": s.type,
+                "capacity": s.capacity,
+                "currentOccupancy": s.current_occupancy,
+                "amenities": s.amenities_json or [],
+                "contact": "+91-44-2235-8888",
+                "location": {"lat": s_lat, "lng": s_lng},
+                "address": s.address or "Chennai",
+                "isOpen": True,
+                "distance_km": round(dist, 2)
+            })
+            
     shelters_with_distance.sort(key=lambda x: x["distance_km"])
     return {"shelters": shelters_with_distance[:limit]}
 
 
 @router.get("/")
-async def list_shelters(is_open: bool = Query(True)):
+async def list_shelters(
+    db: AsyncSession = Depends(get_db)
+):
     """List all shelters."""
-    results = [s for s in SHELTERS if s["is_open"] == is_open] if is_open else SHELTERS
-    return {"shelters": results, "total": len(results)}
+    query = select(Shelter)
+    result = await db.execute(query)
+    shelters = result.scalars().all()
+    
+    response = []
+    for s in shelters:
+        s_lat = s.latitude if hasattr(s, 'latitude') else 13.0
+        s_lng = s.longitude if hasattr(s, 'longitude') else 80.0
+        response.append({
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "capacity": s.capacity,
+            "currentOccupancy": s.current_occupancy,
+            "amenities": s.amenities_json or [],
+            "contact": "+91-44-2235-8888",
+            "location": {"lat": s_lat, "lng": s_lng},
+            "address": s.address or "Chennai",
+            "isOpen": True
+        })
+        
+    return {"shelters": response, "total": len(response)}
 
 
 @router.get("/{shelter_id}")
-async def get_shelter(shelter_id: str):
+async def get_shelter(shelter_id: str, db: AsyncSession = Depends(get_db)):
     """Get shelter details."""
-    shelter = next((s for s in SHELTERS if s["id"] == shelter_id), None)
-    if not shelter:
-        return {"error": "Shelter not found"}
-    return shelter
+    query = select(Shelter).filter(Shelter.id == shelter_id)
+    result = await db.execute(query)
+    s = result.scalars().first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Shelter not found")
+        
+    s_lat = s.latitude if hasattr(s, 'latitude') else 13.0
+    s_lng = s.longitude if hasattr(s, 'longitude') else 80.0
+    return {
+        "id": s.id,
+        "name": s.name,
+        "type": s.type,
+        "capacity": s.capacity,
+        "currentOccupancy": s.current_occupancy,
+        "amenities": s.amenities_json or [],
+        "contact": "+91-44-2235-8888",
+        "location": {"lat": s_lat, "lng": s_lng},
+        "address": s.address or "Chennai",
+        "isOpen": True
+    }
 
 
 @router.put("/{shelter_id}/occupancy")
-async def update_occupancy(shelter_id: str, occupancy: int):
+async def update_occupancy(
+    shelter_id: str,
+    occupancy: int,
+    db: AsyncSession = Depends(get_db)
+):
     """Update shelter occupancy count."""
-    shelter = next((s for s in SHELTERS if s["id"] == shelter_id), None)
-    if not shelter:
-        return {"error": "Shelter not found"}
-    shelter["current_occupancy"] = min(occupancy, shelter["capacity"])
-    return {"status": "updated", "shelter": shelter}
+    query = select(Shelter).filter(Shelter.id == shelter_id)
+    result = await db.execute(query)
+    s = result.scalars().first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Shelter not found")
+        
+    s.current_occupancy = min(max(0, occupancy), s.capacity)
+    await db.commit()
+    await db.refresh(s)
+    
+    s_lat = s.latitude if hasattr(s, 'latitude') else 13.0
+    s_lng = s.longitude if hasattr(s, 'longitude') else 80.0
+    return {
+        "status": "updated",
+        "shelter": {
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "capacity": s.capacity,
+            "currentOccupancy": s.current_occupancy,
+            "amenities": s.amenities_json or [],
+            "contact": "+91-44-2235-8888",
+            "location": {"lat": s_lat, "lng": s_lng},
+            "address": s.address or "Chennai",
+            "isOpen": True
+        }
+    }

@@ -1,84 +1,27 @@
 """
 GeoGuard AI - Predictions API
-Serves flood risk predictions with XAI explanations.
+Serves flood risk predictions with XAI explanations using the database.
 """
 from fastapi import APIRouter, Query, Depends
-from typing import Optional
+from typing import Optional, List, Dict, Any
 import random
-import math
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from app.core.database import get_db
+from app.models.models import FloodPrediction, RiskZone
 
 router = APIRouter()
 
-# Simulated prediction data for Chennai region
-PREDICTIONS = [
-    {
-        "id": "pred-001",
-        "zone_id": "zone-001",
-        "zone_name": "Adyar River Basin",
-        "risk_score": 89,
-        "probability": 0.87,
-        "confidence": 0.92,
-        "predicted_depth": 1.8,
-        "predicted_duration": 48,
-        "risk_level": "critical",
-        "affected_population": 45000,
-        "predicted_for": "2026-06-18T06:00:00Z",
-        "generated_at": "2026-06-16T10:00:00Z",
-        "center": {"lat": 13.0067, "lng": 80.2206},
-        "factors": [
-            {"name": "River Water Level", "value": 4.2, "unit": "m", "contribution": 28, "trend": "increasing", "threshold": 3.5, "description": "Adyar river level has crossed danger mark by 20%"},
-            {"name": "Rainfall Intensity", "value": 82, "unit": "mm/hr", "contribution": 24, "trend": "increasing", "threshold": 65, "description": "Extreme rainfall exceeding 65mm/hr threshold"},
-            {"name": "Soil Saturation", "value": 92, "unit": "%", "contribution": 18, "trend": "increasing", "threshold": 80, "description": "Soil is nearly fully saturated"},
-            {"name": "Drainage Capacity", "value": 35, "unit": "%", "contribution": 15, "trend": "decreasing", "threshold": 50, "description": "Urban drainage at 35% capacity"},
-            {"name": "Upstream Reservoir", "value": 87, "unit": "%", "contribution": 10, "trend": "increasing", "threshold": 85, "description": "Chembarambakkam reservoir at 87%"},
-            {"name": "Tide Level", "value": 1.4, "unit": "m", "contribution": 5, "trend": "stable", "threshold": 1.2, "description": "High tide preventing drainage"},
-        ],
-    },
-    {
-        "id": "pred-002",
-        "zone_id": "zone-002",
-        "zone_name": "Cooum River Corridor",
-        "risk_score": 76,
-        "probability": 0.73,
-        "confidence": 0.88,
-        "predicted_depth": 1.2,
-        "predicted_duration": 36,
-        "risk_level": "high",
-        "affected_population": 62000,
-        "predicted_for": "2026-06-18T08:00:00Z",
-        "generated_at": "2026-06-16T10:00:00Z",
-        "center": {"lat": 13.0827, "lng": 80.2707},
-        "factors": [
-            {"name": "River Water Level", "value": 3.8, "unit": "m", "contribution": 30, "trend": "increasing", "threshold": 3.5, "description": "Cooum river approaching danger mark"},
-            {"name": "Rainfall Intensity", "value": 58, "unit": "mm/hr", "contribution": 25, "trend": "increasing", "threshold": 65, "description": "Heavy rainfall continuing"},
-            {"name": "Soil Saturation", "value": 85, "unit": "%", "contribution": 20, "trend": "increasing", "threshold": 80, "description": "Soil highly saturated"},
-            {"name": "Urban Encroachment", "value": 72, "unit": "%", "contribution": 15, "trend": "stable", "threshold": 40, "description": "Significant floodplain encroachment"},
-            {"name": "Drainage Capacity", "value": 42, "unit": "%", "contribution": 10, "trend": "decreasing", "threshold": 50, "description": "Drainage partially blocked"},
-        ],
-    },
-    {
-        "id": "pred-003",
-        "zone_id": "zone-003",
-        "zone_name": "Velachery Low-Lying Area",
-        "risk_score": 82,
-        "probability": 0.80,
-        "confidence": 0.90,
-        "predicted_depth": 1.5,
-        "predicted_duration": 60,
-        "risk_level": "critical",
-        "affected_population": 35000,
-        "predicted_for": "2026-06-17T18:00:00Z",
-        "generated_at": "2026-06-16T10:00:00Z",
-        "center": {"lat": 12.9815, "lng": 80.2180},
-        "factors": [
-            {"name": "Elevation", "value": 2.1, "unit": "m ASL", "contribution": 30, "trend": "stable", "threshold": 5, "description": "Extremely low elevation area"},
-            {"name": "Rainfall Accumulation", "value": 210, "unit": "mm", "contribution": 25, "trend": "increasing", "threshold": 150, "description": "24hr accumulation exceeds threshold"},
-            {"name": "Drainage Capacity", "value": 28, "unit": "%", "contribution": 20, "trend": "decreasing", "threshold": 50, "description": "Poor drainage infrastructure"},
-            {"name": "Water Table", "value": 0.8, "unit": "m", "contribution": 15, "trend": "increasing", "threshold": 1.5, "description": "Water table very high"},
-            {"name": "Surface Runoff", "value": 78, "unit": "%", "contribution": 10, "trend": "increasing", "threshold": 60, "description": "High surface runoff coefficient"},
-        ],
-    },
-]
+# Center coordinates matching the frontend
+ZONE_CENTERS = {
+    "zone-001": {"lat": 13.0067, "lng": 80.2206}, # Adyar
+    "zone-002": {"lat": 13.0827, "lng": 80.2707}, # Cooum
+    "zone-003": {"lat": 12.9815, "lng": 80.2180}, # Velachery
+    "zone-004": {"lat": 13.0339, "lng": 80.2697}, # Mylapore
+    "zone-005": {"lat": 12.9260, "lng": 80.1020}, # Tambaram
+}
 
 
 @router.get("/")
@@ -86,40 +29,87 @@ async def list_predictions(
     risk_level: Optional[str] = Query(None, description="Filter by risk level"),
     min_score: Optional[int] = Query(None, description="Minimum risk score"),
     limit: int = Query(20, le=100),
+    db: AsyncSession = Depends(get_db)
 ):
     """List all flood predictions with optional filtering."""
-    results = PREDICTIONS.copy()
+    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone))
     
-    if risk_level:
-        results = [p for p in results if p["risk_level"] == risk_level]
-    if min_score:
-        results = [p for p in results if p["risk_score"] >= min_score]
+    if min_score is not None:
+        query = query.filter(FloodPrediction.risk_score >= min_score)
+        
+    result = await db.execute(query)
+    predictions = result.scalars().unique().all()
+    
+    response = []
+    for pred in predictions:
+        # Check risk level filter from the zone
+        if risk_level and pred.zone.risk_level != risk_level:
+            continue
+            
+        affected_pop = int(pred.zone.population * (pred.risk_score / 100))
+        response.append({
+            "id": pred.id,
+            "zoneId": pred.zone_id,
+            "zoneName": pred.zone.name,
+            "riskScore": pred.risk_score,
+            "probability": pred.probability,
+            "confidence": pred.confidence,
+            "predictedDepth": pred.predicted_depth,
+            "predictedDuration": pred.predicted_duration,
+            "riskLevel": pred.zone.risk_level,
+            "affectedPopulation": affected_pop,
+            "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
+            "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
+            "center": ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200}),
+            "factors": pred.factors_json or []
+        })
+        
+    # Apply limit
+    response = response[:limit]
     
     return {
-        "predictions": results[:limit],
-        "total": len(results),
+        "predictions": response,
+        "total": len(response),
         "filters": {"risk_level": risk_level, "min_score": min_score},
     }
 
 
 @router.get("/{prediction_id}")
-async def get_prediction(prediction_id: str):
+async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db)):
     """Get detailed prediction with XAI factors."""
-    pred = next((p for p in PREDICTIONS if p["id"] == prediction_id), None)
+    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone)).filter(FloodPrediction.id == prediction_id)
+    result = await db.execute(query)
+    pred = result.scalars().first()
     if not pred:
         return {"error": "Prediction not found"}
-    
+        
+    factors = pred.factors_json or []
     # Generate XAI explanation
-    top_factors = sorted(pred["factors"], key=lambda f: f["contribution"], reverse=True)[:3]
-    explanation = f"Flood Risk = {pred['risk_score']}%. "
-    explanation += f"This prediction is driven primarily by {top_factors[0]['name'].lower()} "
-    explanation += f"(contributing {top_factors[0]['contribution']}%) "
-    explanation += f"and {top_factors[1]['name'].lower()} "
-    explanation += f"(contributing {top_factors[1]['contribution']}%). "
-    explanation += f"Model confidence is {int(pred['confidence'] * 100)}% based on 847 similar historical events."
+    top_factors = sorted(factors, key=lambda f: f.get("contribution", 0), reverse=True)[:3]
+    explanation = f"Flood Risk = {int(pred.risk_score)}%. "
+    if len(top_factors) >= 2:
+        explanation += f"This prediction is driven primarily by {top_factors[0]['name'].lower()} "
+        explanation += f"(contributing {top_factors[0]['contribution']}%) "
+        explanation += f"and {top_factors[1]['name'].lower()} "
+        explanation += f"(contributing {top_factors[1]['contribution']}%). "
+    explanation += f"Model confidence is {int(pred.confidence * 100)}% based on 847 similar historical events."
     
+    affected_pop = int(pred.zone.population * (pred.risk_score / 100))
     return {
-        **pred,
+        "id": pred.id,
+        "zoneId": pred.zone_id,
+        "zoneName": pred.zone.name,
+        "riskScore": pred.risk_score,
+        "probability": pred.probability,
+        "confidence": pred.confidence,
+        "predictedDepth": pred.predicted_depth,
+        "predictedDuration": pred.predicted_duration,
+        "riskLevel": pred.zone.risk_level,
+        "affectedPopulation": affected_pop,
+        "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
+        "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
+        "center": ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200}),
+        "factors": factors,
         "xai_explanation": explanation,
         "model_info": {
             "primary_model": "XGBoost v2.1",
@@ -131,12 +121,16 @@ async def get_prediction(prediction_id: str):
 
 
 @router.get("/heatmap/data")
-async def get_heatmap_data():
+async def get_heatmap_data(db: AsyncSession = Depends(get_db)):
     """Get risk heatmap data as GeoJSON points."""
+    query = select(FloodPrediction)
+    result = await db.execute(query)
+    predictions = result.scalars().all()
+    
     points = []
-    for pred in PREDICTIONS:
-        center = pred["center"]
-        intensity = pred["risk_score"] / 100
+    for pred in predictions:
+        center = ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200})
+        intensity = pred.risk_score / 100
         # Generate surrounding points for heat effect
         for _ in range(5):
             points.append({
@@ -149,10 +143,108 @@ async def get_heatmap_data():
 
 
 @router.post("/generate")
-async def generate_predictions():
-    """Trigger prediction pipeline (authority only)."""
+async def generate_predictions(db: AsyncSession = Depends(get_db)):
+    """Trigger prediction pipeline, executing ML simulation for all zones."""
+    from app.ml.prediction.risk_engine import RiskEngine
+    from datetime import datetime, timedelta
+    
+    engine = RiskEngine()
+    
+    # Get all zones
+    zones_result = await db.execute(select(RiskZone))
+    zones = zones_result.scalars().all()
+    
+    predictions_generated = []
+    
+    for zone in zones:
+        # Simulate weather and hydrologic inputs per zone
+        if "Adyar" in zone.name:
+            inputs = {
+                "river_level": random.uniform(3.8, 4.5),
+                "rainfall_intensity": random.uniform(70, 90),
+                "soil_saturation": random.uniform(85, 95),
+                "drainage_capacity": random.uniform(30, 40),
+                "upstream_reservoir": random.uniform(80, 90),
+                "tide_level": random.uniform(1.2, 1.6),
+            }
+        elif "Velachery" in zone.name:
+            inputs = {
+                "river_level": random.uniform(2.5, 3.2),
+                "rainfall_intensity": random.uniform(80, 100),
+                "soil_saturation": random.uniform(90, 98),
+                "drainage_capacity": random.uniform(20, 30),
+                "upstream_reservoir": random.uniform(50, 70),
+                "tide_level": random.uniform(0.8, 1.2),
+            }
+        elif "Cooum" in zone.name:
+            inputs = {
+                "river_level": random.uniform(3.2, 3.9),
+                "rainfall_intensity": random.uniform(50, 70),
+                "soil_saturation": random.uniform(75, 88),
+                "drainage_capacity": random.uniform(40, 50),
+                "upstream_reservoir": random.uniform(60, 80),
+                "tide_level": random.uniform(0.9, 1.3),
+            }
+        else:
+            inputs = {
+                "river_level": random.uniform(1.5, 2.5),
+                "rainfall_intensity": random.uniform(20, 50),
+                "soil_saturation": random.uniform(50, 70),
+                "drainage_capacity": random.uniform(60, 80),
+                "upstream_reservoir": random.uniform(40, 60),
+                "tide_level": random.uniform(0.4, 0.9),
+            }
+        
+        # Run Risk Engine
+        risk_result = engine.predict_risk(inputs)
+        
+        # Update zone's risk level in db
+        zone.risk_level = risk_result["risk_level"]
+        
+        # Simulate depth & duration
+        predicted_depth = round(random.uniform(1.2, 2.2) if zone.risk_level in ["critical", "high"] else random.uniform(0.1, 0.8), 2)
+        predicted_duration = round(random.choice([12.0, 24.0, 36.0, 48.0, 60.0]))
+        
+        # Check if prediction already exists for this zone
+        pred_result = await db.execute(
+            select(FloodPrediction).filter(FloodPrediction.zone_id == zone.id)
+        )
+        pred = pred_result.scalars().first()
+        
+        if not pred:
+            pred = FloodPrediction(
+                zone_id=zone.id,
+                risk_score=risk_result["risk_score"],
+                probability=risk_result["probability"],
+                confidence=risk_result["confidence"],
+                factors_json=risk_result["factors"],
+                predicted_depth=predicted_depth,
+                predicted_duration=predicted_duration,
+                predicted_for=datetime.utcnow() + timedelta(days=1),
+                generated_at=datetime.utcnow()
+            )
+            db.add(pred)
+        else:
+            pred.risk_score = risk_result["risk_score"]
+            pred.probability = risk_result["probability"]
+            pred.confidence = risk_result["confidence"]
+            pred.factors_json = risk_result["factors"]
+            pred.predicted_depth = predicted_depth
+            pred.predicted_duration = predicted_duration
+            pred.predicted_for = datetime.utcnow() + timedelta(days=1)
+            pred.generated_at = datetime.utcnow()
+            
+        predictions_generated.append({
+            "zone_id": zone.id,
+            "zone_name": zone.name,
+            "risk_score": pred.risk_score,
+            "risk_level": zone.risk_level
+        })
+        
+    await db.commit()
+    
     return {
-        "status": "generating",
-        "message": "Prediction pipeline started. Results available in ~30 seconds.",
-        "zones_queued": len(PREDICTIONS),
+        "status": "success",
+        "message": f"Successfully ran predictions pipeline. Updated {len(predictions_generated)} zones.",
+        "predictions": predictions_generated
     }

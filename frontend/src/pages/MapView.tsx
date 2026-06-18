@@ -1,59 +1,215 @@
-import { useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Polygon, Marker, Popup, CircleMarker, Polyline, useMap } from 'react-leaflet';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  APIProvider,
+  Map,
+  AdvancedMarker,
+  InfoWindow,
+  useMap,
+  useMapsLibrary,
+} from '@vis.gl/react-google-maps';
 import { motion, AnimatePresence } from 'framer-motion';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import {
   Layers, Eye, EyeOff, Navigation, Building, MapPin,
-  AlertTriangle, Droplets, Users, Shield, Clock, X,
-  ChevronRight, Maximize2, Minimize2, Crosshair,
-  Radio, Activity, Zap,
+  Droplets, Users, Clock, X, Maximize2, Minimize2,
+  Activity, Zap, RefreshCw,
 } from 'lucide-react';
-import {
-  mockFloodZones, mockShelters, mockReports, mockPredictions,
-  mockEvacuationRoutes, mockHeatmapPoints,
-} from '../data/mockData';
+import { mockEvacuationRoutes } from '../data/mockData';
 import { getRiskColor, getRiskBadgeClass, formatNumber } from '../utils/helpers';
 import { useAppStore } from '../stores/useAppStore';
+import { api } from '../utils/api';
 
-// Custom marker icons
-const createIcon = (color: string, size: number = 10) =>
-  L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="width:${size}px;height:${size}px;background:${color};border-radius:50%;border:2px solid white;box-shadow:0 0 8px ${color}80;"></div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+const GMAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 
-const shelterIcon = L.divIcon({
-  className: 'custom-marker',
-  html: `<div style="width:28px;height:28px;background:linear-gradient(135deg,#10b981,#06b6d4);border-radius:8px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 8px rgba(16,185,129,0.4);">🏠</div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14],
-});
+// ─── Helper: build a small square polygon around a center ────────────────────
+function centerToLatLngBounds(lat: number, lng: number, half = 0.012) {
+  return [
+    { lat: lat + half, lng: lng - half },
+    { lat: lat + half, lng: lng + half },
+    { lat: lat - half, lng: lng + half },
+    { lat: lat - half, lng: lng - half },
+  ];
+}
 
-const reportIcons: Record<string, string> = {
-  flood: '🌊',
-  road_blocked: '🚧',
-  bridge_damaged: '🌉',
-  tree_fallen: '🌳',
-  power_outage: '⚡',
-  fire: '🔥',
-  landslide: '🏔️',
-  other: '📍',
-};
+// ─── Flood Zone Polygons drawn via Maps JavaScript API ────────────────────────
+function FloodZonePolygons({
+  zones,
+  visible,
+  onZoneClick,
+}: {
+  zones: any[];
+  visible: boolean;
+  onZoneClick: (pred: any) => void;
+}) {
+  const map = useMap();
+  const mapsLib = useMapsLibrary('maps') as any;
+  const polygonsRef = useRef<google.maps.Polygon[]>([]);
 
-function MapLegend({ layers, toggleLayer }: { layers: string[]; toggleLayer: (l: string) => void }) {
+  useEffect(() => {
+    if (!map || !mapsLib || !visible) {
+      polygonsRef.current.forEach((p) => p.setMap(null));
+      polygonsRef.current = [];
+      return;
+    }
+
+    // Remove old polygons
+    polygonsRef.current.forEach((p) => p.setMap(null));
+    polygonsRef.current = [];
+
+    zones.forEach((zone) => {
+      const color = getRiskColor(zone.riskLevel);
+      const half = 0.008 + (zone.riskScore / 100) * 0.018;
+      const paths = centerToLatLngBounds(zone.center.lat, zone.center.lng, half);
+
+      const polygon = new mapsLib.Polygon({
+        paths,
+        map,
+        strokeColor: color,
+        strokeOpacity: 0.9,
+        strokeWeight: 2,
+        fillColor: color,
+        fillOpacity: 0.2,
+        clickable: true,
+        zIndex: zone.riskLevel === 'critical' ? 10 : 5,
+      });
+
+      polygon.addListener('click', () => onZoneClick(zone.prediction));
+      polygonsRef.current.push(polygon);
+    });
+
+    return () => {
+      polygonsRef.current.forEach((p) => p.setMap(null));
+      polygonsRef.current = [];
+    };
+  }, [map, mapsLib, zones, visible, onZoneClick]);
+
+  return null;
+}
+
+// ─── Heatmap layer via visualization library ──────────────────────────────────
+function HeatmapLayer({
+  points,
+  visible,
+}: {
+  points: { lat: number; lng: number; intensity: number }[];
+  visible: boolean;
+}) {
+  const map = useMap();
+  const visualizationLib = useMapsLibrary('visualization') as any;
+  const heatmapRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!map || !visualizationLib) return;
+
+    if (!heatmapRef.current) {
+      heatmapRef.current = new visualizationLib.HeatmapLayer({
+        map,
+        radius: 40,
+        opacity: 0.7,
+        gradient: [
+          'rgba(16, 185, 129, 0)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(6, 182, 212, 1)',
+          'rgba(245, 158, 11, 1)',
+          'rgba(239, 68, 68, 1)',
+        ],
+      });
+    }
+
+    const data = points.map(
+      (p) =>
+        new google.maps.LatLng(p.lat, p.lng)
+    );
+    heatmapRef.current.setData(data);
+    heatmapRef.current.setMap(visible ? map : null);
+
+    return () => {
+      heatmapRef.current?.setMap(null);
+    };
+  }, [map, visualizationLib, points, visible]);
+
+  return null;
+}
+
+// ─── Evacuation Route Polylines ───────────────────────────────────────────────
+function EvacuationRoutes({ visible }: { visible: boolean }) {
+  const map = useMap();
+  const mapsLib = useMapsLibrary('maps') as any;
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+
+  useEffect(() => {
+    if (!map || !mapsLib) return;
+
+    polylinesRef.current.forEach((p) => p.setMap(null));
+    polylinesRef.current = [];
+
+    if (!visible) return;
+
+    mockEvacuationRoutes.forEach((route) => {
+      const path = [
+        { lat: route.origin.lat, lng: route.origin.lng },
+        ...route.waypoints.map((wp) => ({ lat: wp.lat, lng: wp.lng })),
+        { lat: route.destination.lat, lng: route.destination.lng },
+      ];
+
+      const polyline = new mapsLib.Polyline({
+        path,
+        map,
+        strokeColor: route.isRecommended ? '#10b981' : '#f59e0b',
+        strokeOpacity: 0.85,
+        strokeWeight: 4,
+        icons: route.isRecommended
+          ? undefined
+          : [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 4 }, offset: '0', repeat: '20px' }],
+        clickable: false,
+      });
+
+      polylinesRef.current.push(polyline);
+    });
+
+    return () => {
+      polylinesRef.current.forEach((p) => p.setMap(null));
+      polylinesRef.current = [];
+    };
+  }, [map, mapsLib, visible]);
+
+  return null;
+}
+
+// ─── Auto-fit map to data bounds ──────────────────────────────────────────────
+function AutoFitBounds({ points }: { points: { lat: number; lng: number }[] }) {
+  const map = useMap();
+  const mapsLib = useMapsLibrary('maps') as any;
+  const fitted = useRef(false);
+
+  useEffect(() => {
+    if (!map || !mapsLib || points.length === 0 || fitted.current) return;
+    const bounds = new mapsLib.LatLngBounds();
+    points.forEach((p) => bounds.extend(p));
+    map.fitBounds(bounds, 60);
+    fitted.current = true;
+  }, [map, mapsLib, points]);
+
+  return null;
+}
+
+// ─── Map Legend ───────────────────────────────────────────────────────────────
+function MapLegend({
+  layers,
+  toggleLayer,
+}: {
+  layers: string[];
+  toggleLayer: (l: string) => void;
+}) {
   const allLayers = [
-    { key: 'flood-zones', label: 'Flood Zones', icon: Droplets, color: '#ef4444' },
-    { key: 'shelters', label: 'Shelters', icon: Building, color: '#10b981' },
-    { key: 'reports', label: 'Citizen Reports', icon: MapPin, color: '#f59e0b' },
-    { key: 'evacuation', label: 'Evacuation Routes', icon: Navigation, color: '#06b6d4' },
-    { key: 'risk-heatmap', label: 'Risk Heatmap', icon: Activity, color: '#8b5cf6' },
+    { key: 'flood-zones',  label: 'Flood Zones',       icon: Droplets,   color: '#ef4444' },
+    { key: 'shelters',     label: 'Shelters',           icon: Building,   color: '#10b981' },
+    { key: 'reports',      label: 'Citizen Reports',    icon: MapPin,     color: '#f59e0b' },
+    { key: 'evacuation',   label: 'Evacuation Routes',  icon: Navigation, color: '#06b6d4' },
+    { key: 'risk-heatmap', label: 'Risk Heatmap',       icon: Activity,   color: '#8b5cf6' },
   ];
 
   return (
-    <div className="absolute top-4 right-4 z-[1000] glass-card-static p-3 min-w-[180px]">
+    <div className="absolute top-4 right-4 z-[100] glass-card-static p-3 min-w-[185px]">
       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/5">
         <Layers size={14} className="text-cyan-400" />
         <span className="text-xs font-semibold text-white">Map Layers</span>
@@ -68,25 +224,21 @@ function MapLegend({ layers, toggleLayer }: { layers: string[]; toggleLayer: (l:
               : 'text-slate-500 hover:text-slate-300'
           }`}
         >
-          {layers.includes(layer.key) ? (
-            <Eye size={12} style={{ color: layer.color }} />
-          ) : (
-            <EyeOff size={12} />
-          )}
+          {layers.includes(layer.key)
+            ? <Eye size={12} style={{ color: layer.color }} />
+            : <EyeOff size={12} />}
           <layer.icon size={12} style={{ color: layers.includes(layer.key) ? layer.color : undefined }} />
           <span>{layer.label}</span>
         </button>
       ))}
-
-      {/* Legend Colors */}
       <div className="mt-3 pt-2 border-t border-white/5">
         <p className="text-[10px] text-slate-500 mb-1.5">Risk Levels</p>
         <div className="space-y-1">
           {[
             { label: 'Critical', color: '#ef4444' },
-            { label: 'High', color: '#f59e0b' },
-            { label: 'Medium', color: '#06b6d4' },
-            { label: 'Low', color: '#10b981' },
+            { label: 'High',     color: '#f59e0b' },
+            { label: 'Medium',   color: '#06b6d4' },
+            { label: 'Low',      color: '#10b981' },
           ].map((r) => (
             <div key={r.label} className="flex items-center gap-2 text-[10px]">
               <div className="w-3 h-2 rounded-sm" style={{ backgroundColor: r.color, opacity: 0.4 }} />
@@ -99,13 +251,14 @@ function MapLegend({ layers, toggleLayer }: { layers: string[]; toggleLayer: (l:
   );
 }
 
-function ZoneInfoPanel({ prediction, onClose }: { prediction: typeof mockPredictions[0]; onClose: () => void }) {
+// ─── Zone Info Side-panel ─────────────────────────────────────────────────────
+function ZoneInfoPanel({ prediction, onClose }: { prediction: any; onClose: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="absolute top-4 left-4 z-[1000] glass-card-static p-5 w-80"
+      className="absolute top-4 left-4 z-[100] glass-card-static p-5 w-80"
     >
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-bold text-white">{prediction.zoneName}</h3>
@@ -114,24 +267,22 @@ function ZoneInfoPanel({ prediction, onClose }: { prediction: typeof mockPredict
         </button>
       </div>
 
-      {/* Risk Score */}
+      {/* Circular risk gauge */}
       <div className="flex items-center gap-3 mb-4">
         <div className="relative w-16 h-16">
           <svg width="64" height="64" className="transform -rotate-90">
             <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(148,163,184,0.1)" strokeWidth="6" />
             <circle
-              cx="32" cy="32" r="26"
-              fill="none"
+              cx="32" cy="32" r="26" fill="none"
               stroke={getRiskColor(prediction.riskLevel)}
-              strokeWidth="6"
-              strokeLinecap="round"
+              strokeWidth="6" strokeLinecap="round"
               strokeDasharray={`${2 * Math.PI * 26}`}
               strokeDashoffset={`${2 * Math.PI * 26 * (1 - prediction.riskScore / 100)}`}
               style={{ filter: `drop-shadow(0 0 4px ${getRiskColor(prediction.riskLevel)}50)` }}
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-lg font-bold text-white">{prediction.riskScore}</span>
+            <span className="text-lg font-bold text-white">{Math.round(prediction.riskScore)}</span>
           </div>
         </div>
         <div>
@@ -140,252 +291,351 @@ function ZoneInfoPanel({ prediction, onClose }: { prediction: typeof mockPredict
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stat grid */}
       <div className="grid grid-cols-2 gap-2 mb-4">
-        <div className="p-2 rounded-lg bg-white/[0.03] text-center">
-          <Droplets size={14} className="text-blue-400 mx-auto mb-1" />
-          <p className="text-sm font-bold text-white">{prediction.predictedDepth}m</p>
-          <p className="text-[10px] text-slate-500">Depth</p>
-        </div>
-        <div className="p-2 rounded-lg bg-white/[0.03] text-center">
-          <Clock size={14} className="text-amber-400 mx-auto mb-1" />
-          <p className="text-sm font-bold text-white">{prediction.predictedDuration}h</p>
-          <p className="text-[10px] text-slate-500">Duration</p>
-        </div>
-        <div className="p-2 rounded-lg bg-white/[0.03] text-center">
-          <Users size={14} className="text-cyan-400 mx-auto mb-1" />
-          <p className="text-sm font-bold text-white">{formatNumber(prediction.affectedPopulation)}</p>
-          <p className="text-[10px] text-slate-500">People</p>
-        </div>
-        <div className="p-2 rounded-lg bg-white/[0.03] text-center">
-          <Zap size={14} className="text-purple-400 mx-auto mb-1" />
-          <p className="text-sm font-bold text-white">{Math.round(prediction.probability * 100)}%</p>
-          <p className="text-[10px] text-slate-500">Probability</p>
-        </div>
+        {[
+          { icon: Droplets, color: 'text-blue-400',   label: 'Depth',       value: `${prediction.predictedDepth}m` },
+          { icon: Clock,    color: 'text-amber-400',  label: 'Duration',     value: `${prediction.predictedDuration}h` },
+          { icon: Users,    color: 'text-cyan-400',   label: 'People',       value: formatNumber(prediction.affectedPopulation) },
+          { icon: Zap,      color: 'text-purple-400', label: 'Probability',  value: `${Math.round(prediction.probability * 100)}%` },
+        ].map(({ icon: Icon, color, label, value }) => (
+          <div key={label} className="p-2 rounded-lg bg-white/[0.03] text-center">
+            <Icon size={14} className={`${color} mx-auto mb-1`} />
+            <p className="text-sm font-bold text-white">{value}</p>
+            <p className="text-[10px] text-slate-500">{label}</p>
+          </div>
+        ))}
       </div>
 
-      {/* XAI Factors */}
-      <div className="border-t border-white/5 pt-3">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Zap size={12} className="text-cyan-400" />
-          <span className="text-xs font-semibold text-white">Why This Prediction?</span>
-        </div>
-        <div className="space-y-2">
-          {prediction.factors.slice(0, 4).map((factor) => (
-            <div key={factor.name}>
-              <div className="flex items-center justify-between text-[10px] mb-0.5">
-                <span className="text-slate-400">{factor.name}</span>
-                <span className="text-slate-300 font-medium">
-                  {factor.value}{factor.unit} 
-                  <span className={factor.trend === 'increasing' ? 'text-red-400' : factor.trend === 'decreasing' ? 'text-emerald-400' : 'text-slate-500'}>
-                    {' '}{factor.trend === 'increasing' ? '↑' : factor.trend === 'decreasing' ? '↓' : '→'}
+      {/* XAI factors */}
+      {prediction.factors?.length > 0 && (
+        <div className="border-t border-white/5 pt-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Zap size={12} className="text-cyan-400" />
+            <span className="text-xs font-semibold text-white">Why This Prediction?</span>
+          </div>
+          <div className="space-y-2">
+            {prediction.factors.slice(0, 4).map((f: any) => (
+              <div key={f.name}>
+                <div className="flex items-center justify-between text-[10px] mb-0.5">
+                  <span className="text-slate-400">{f.name}</span>
+                  <span className="text-slate-300 font-medium">
+                    {f.value}{f.unit}
+                    <span className={f.trend === 'increasing' ? 'text-red-400' : f.trend === 'decreasing' ? 'text-emerald-400' : 'text-slate-500'}>
+                      {' '}{f.trend === 'increasing' ? '↑' : f.trend === 'decreasing' ? '↓' : '→'}
+                    </span>
                   </span>
-                </span>
+                </div>
+                <div className="h-1 rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(100, f.contribution * 3)}%`, backgroundColor: getRiskColor(prediction.riskLevel) }}
+                  />
+                </div>
               </div>
-              <div className="h-1 rounded-full bg-white/5 overflow-hidden">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${factor.contribution * 3}%`,
-                    backgroundColor: getRiskColor(prediction.riskLevel),
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 }
 
-export default function MapView() {
-  const { activeMapLayers, toggleMapLayer } = useAppStore();
-  const [selectedPrediction, setSelectedPrediction] = useState<typeof mockPredictions[0] | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+// ─── Custom Shelter Pin ───────────────────────────────────────────────────────
+function ShelterMarker({ shelter, onClick }: { shelter: any; onClick: () => void }) {
+  return (
+    <AdvancedMarker
+      position={{ lat: shelter.location.lat, lng: shelter.location.lng }}
+      onClick={onClick}
+      title={shelter.name}
+    >
+      <div
+        style={{
+          width: 30, height: 30,
+          background: 'linear-gradient(135deg,#10b981,#06b6d4)',
+          borderRadius: 8, border: '2px solid white',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, boxShadow: '0 2px 10px rgba(16,185,129,0.5)',
+          cursor: 'pointer',
+        }}
+      >🏠</div>
+    </AdvancedMarker>
+  );
+}
+
+// ─── Custom Report Pin ────────────────────────────────────────────────────────
+const REPORT_ICONS: Record<string, string> = {
+  flood: '🌊', road_blocked: '🚧', bridge_damaged: '🌉',
+  tree_fallen: '🌳', power_outage: '⚡', fire: '🔥',
+  landslide: '🏔️', other: '📍',
+};
+
+function ReportMarker({ report, onClick }: { report: any; onClick: () => void }) {
+  const borderColor = report.severity >= 4 ? '#ef4444' : '#f59e0b';
+  return (
+    <AdvancedMarker
+      position={{ lat: report.location.lat, lng: report.location.lng }}
+      onClick={onClick}
+      title={report.type}
+    >
+      <div
+        style={{
+          width: 26, height: 26,
+          background: 'rgba(15,23,42,0.92)',
+          borderRadius: 7, border: `1.5px solid ${borderColor}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          cursor: 'pointer',
+        }}
+      >{REPORT_ICONS[report.type] ?? '📍'}</div>
+    </AdvancedMarker>
+  );
+}
+
+// ─── Dark Google Maps style ───────────────────────────────────────────────────
+const DARK_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0f172a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0f172a' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#334155' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0c1929' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#334155' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
+];
+
+// ─── Inner map content (needs to be inside APIProvider + Map) ─────────────────
+function MapContent({
+  activeMapLayers,
+  predictions,
+  shelters,
+  reports,
+  heatmapPoints,
+  onZoneClick,
+}: {
+  activeMapLayers: string[];
+  predictions: any[];
+  shelters: any[];
+  reports: any[];
+  heatmapPoints: { lat: number; lng: number; intensity: number }[];
+  onZoneClick: (pred: any) => void;
+}) {
+  const [selectedShelter, setSelectedShelter] = useState<any>(null);
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+
+  // Build flood zone data for polygon renderer
+  const floodZones = predictions.map((pred) => ({
+    id: pred.zoneId ?? pred.id,
+    name: pred.zoneName,
+    riskLevel: pred.riskLevel,
+    riskScore: pred.riskScore,
+    center: pred.center ?? { lat: 0, lng: 0 },
+    prediction: pred,
+  }));
+
+  // All lat/lng for auto-fit
+  const allPoints = [
+    ...predictions.filter((p) => p.center?.lat).map((p) => ({ lat: p.center.lat, lng: p.center.lng })),
+    ...shelters.filter((s) => s.location?.lat).map((s) => ({ lat: s.location.lat, lng: s.location.lng })),
+    ...reports.filter((r) => r.location?.lat).map((r) => ({ lat: r.location.lat, lng: r.location.lng })),
+  ];
 
   return (
-    <div className={`relative ${isFullscreen ? 'fixed inset-0 z-50' : 'h-[calc(100vh-7rem)] rounded-xl overflow-hidden'}`}>
-      {/* Map */}
-      <MapContainer
-        center={[13.0500, 80.2200]}
-        zoom={12}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
+    <>
+      <AutoFitBounds points={allPoints} />
 
-        {/* Flood Zone Polygons */}
-        {activeMapLayers.includes('flood-zones') &&
-          mockFloodZones.map((zone) => {
-            const color = getRiskColor(zone.riskLevel);
-            return (
-              <Polygon
-                key={zone.id}
-                positions={zone.coordinates.map(([lat, lng]) => [lat, lng] as [number, number])}
-                pathOptions={{
-                  color: color,
-                  fillColor: color,
-                  fillOpacity: 0.2,
-                  weight: 2,
-                  dashArray: zone.riskLevel === 'critical' ? undefined : '5 5',
-                }}
-                eventHandlers={{
-                  click: () => {
-                    const pred = mockPredictions.find((p) => p.zoneName.includes(zone.name.split(' ')[0]));
-                    if (pred) setSelectedPrediction(pred);
-                  },
-                }}
-              >
-                <Popup>
-                  <div className="text-white min-w-[150px]">
-                    <p className="font-semibold text-sm">{zone.name}</p>
-                    <p className="text-xs mt-1 capitalize">Risk: <span style={{ color }}>{zone.riskLevel}</span></p>
-                  </div>
-                </Popup>
-              </Polygon>
-            );
-          })}
+      {/* Flood zone polygons */}
+      <FloodZonePolygons
+        zones={floodZones}
+        visible={activeMapLayers.includes('flood-zones')}
+        onZoneClick={onZoneClick}
+      />
 
-        {/* Risk Heatmap Points */}
-        {activeMapLayers.includes('risk-heatmap') &&
-          mockHeatmapPoints.map((point, i) => (
-            <CircleMarker
-              key={`heat-${i}`}
-              center={[point.lat, point.lng]}
-              radius={point.intensity * 20}
-              pathOptions={{
-                color: 'transparent',
-                fillColor: point.intensity > 0.7 ? '#ef4444' : point.intensity > 0.4 ? '#f59e0b' : '#10b981',
-                fillOpacity: point.intensity * 0.4,
-              }}
+      {/* Heatmap */}
+      <HeatmapLayer
+        points={heatmapPoints}
+        visible={activeMapLayers.includes('risk-heatmap')}
+      />
+
+      {/* Evacuation routes */}
+      <EvacuationRoutes visible={activeMapLayers.includes('evacuation')} />
+
+      {/* Shelter markers */}
+      {activeMapLayers.includes('shelters') &&
+        shelters
+          .filter((s) => s.location?.lat && s.location?.lng)
+          .map((shelter) => (
+            <ShelterMarker
+              key={shelter.id}
+              shelter={shelter}
+              onClick={() => { setSelectedShelter(shelter); setSelectedReport(null); }}
             />
           ))}
 
-        {/* Shelter Markers */}
-        {activeMapLayers.includes('shelters') &&
-          mockShelters.map((shelter) => (
-            <Marker
-              key={shelter.id}
-              position={[shelter.location.lat, shelter.location.lng]}
-              icon={shelterIcon}
-            >
-              <Popup>
-                <div className="text-white min-w-[200px]">
-                  <p className="font-semibold text-sm">{shelter.name}</p>
-                  <p className="text-xs text-slate-400 mt-1">{shelter.address}</p>
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-400">Capacity</span>
-                      <span>{shelter.currentOccupancy}/{shelter.capacity}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-emerald-500"
-                        style={{ width: `${(shelter.currentOccupancy / shelter.capacity) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {shelter.amenities.map((a) => (
-                      <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-white/5">{a}</span>
-                    ))}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
+      {/* Shelter info window */}
+      {selectedShelter && (
+        <InfoWindow
+          position={{ lat: selectedShelter.location.lat, lng: selectedShelter.location.lng }}
+          onCloseClick={() => setSelectedShelter(null)}
+        >
+          <div style={{ background: '#0f172a', color: 'white', minWidth: 200, padding: 8, borderRadius: 8 }}>
+            <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{selectedShelter.name}</p>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>{selectedShelter.address}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+              <span style={{ color: '#94a3b8' }}>Capacity</span>
+              <span>{selectedShelter.currentOccupancy}/{selectedShelter.capacity}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 4, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 4, background: '#10b981', width: `${(selectedShelter.currentOccupancy / selectedShelter.capacity) * 100}%` }} />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+              {(selectedShelter.amenities || []).map((a: string) => (
+                <span key={a} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.08)' }}>{a}</span>
+              ))}
+            </div>
+          </div>
+        </InfoWindow>
+      )}
+
+      {/* Report markers */}
+      {activeMapLayers.includes('reports') &&
+        reports
+          .filter((r) => r.location?.lat && r.location?.lng)
+          .map((report) => (
+            <ReportMarker
+              key={report.id}
+              report={report}
+              onClick={() => { setSelectedReport(report); setSelectedShelter(null); }}
+            />
           ))}
 
-        {/* Citizen Report Markers */}
-        {activeMapLayers.includes('reports') &&
-          mockReports.map((report) => {
-            const icon = L.divIcon({
-              className: 'custom-marker',
-              html: `<div style="width:24px;height:24px;background:rgba(15,23,42,0.9);border-radius:6px;border:1px solid ${
-                report.severity >= 4 ? '#ef4444' : '#f59e0b'
-              };display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.3);">${
-                reportIcons[report.type] || '📍'
-              }</div>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
-            });
+      {/* Report info window */}
+      {selectedReport && (
+        <InfoWindow
+          position={{ lat: selectedReport.location.lat, lng: selectedReport.location.lng }}
+          onCloseClick={() => setSelectedReport(null)}
+        >
+          <div style={{ background: '#0f172a', color: 'white', minWidth: 200, padding: 8, borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 18 }}>{REPORT_ICONS[selectedReport.type] ?? '📍'}</span>
+              <p style={{ fontWeight: 700, fontSize: 13, textTransform: 'capitalize' }}>
+                {selectedReport.type?.replace('_', ' ')}
+              </p>
+              {selectedReport.verified && (
+                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(16,185,129,0.2)', color: '#10b981' }}>✓ Verified</span>
+              )}
+            </div>
+            <p style={{ fontSize: 11, color: '#cbd5e1', marginBottom: 4 }}>{selectedReport.description}</p>
+            <p style={{ fontSize: 10, color: '#64748b' }}>
+              {selectedReport.userName && `By ${selectedReport.userName} • `}Severity: {selectedReport.severity}/5
+            </p>
+          </div>
+        </InfoWindow>
+      )}
+    </>
+  );
+}
 
-            return (
-              <Marker
-                key={report.id}
-                position={[report.location.lat, report.location.lng]}
-                icon={icon}
-              >
-                <Popup>
-                  <div className="text-white min-w-[200px]">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{reportIcons[report.type]}</span>
-                      <p className="font-semibold text-sm capitalize">{report.type.replace('_', ' ')}</p>
-                      {report.verified && (
-                        <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">✓ Verified</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-300 mt-1">{report.description}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">By {report.userName} • Severity: {report.severity}/5</p>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+// ─── Main MapView ─────────────────────────────────────────────────────────────
+export default function MapView() {
+  const {
+    activeMapLayers, toggleMapLayer,
+    predictions, shelters, reports,
+    fetchPredictions, fetchShelters, fetchReports,
+  } = useAppStore();
 
-        {/* Evacuation Routes */}
-        {activeMapLayers.includes('evacuation') &&
-          mockEvacuationRoutes.map((route) => (
-            <Polyline
-              key={route.id}
-              positions={[
-                [route.origin.lat, route.origin.lng],
-                ...route.waypoints.map((wp) => [wp.lat, wp.lng] as [number, number]),
-                [route.destination.lat, route.destination.lng],
-              ]}
-              pathOptions={{
-                color: route.isRecommended ? '#10b981' : '#f59e0b',
-                weight: 4,
-                opacity: 0.8,
-                dashArray: route.isRecommended ? undefined : '10 6',
-              }}
-            >
-              <Popup>
-                <div className="text-white min-w-[180px]">
-                  <p className="font-semibold text-sm">{route.name}</p>
-                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-                    <div>
-                      <p className="text-slate-400">Distance</p>
-                      <p className="font-medium">{route.distance} km</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">Est. Time</p>
-                      <p className="font-medium">{route.estimatedTime} min</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">Route Risk</p>
-                      <p className="font-medium" style={{ color: route.riskAlongRoute > 50 ? '#ef4444' : '#10b981' }}>
-                        {route.riskAlongRoute}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">To</p>
-                      <p className="font-medium">{route.shelterName.split(' ').slice(0, 2).join(' ')}</p>
-                    </div>
-                  </div>
-                </div>
-              </Popup>
-            </Polyline>
-          ))}
-      </MapContainer>
+  const [selectedPrediction, setSelectedPrediction] = useState<any>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [heatmapPoints, setHeatmapPoints] = useState<{ lat: number; lng: number; intensity: number }[]>([]);
 
-      {/* Layer Controls */}
+  useEffect(() => {
+    fetchPredictions();
+    fetchShelters();
+    fetchReports();
+    fetchHeatmap();
+  }, []);
+
+  async function fetchHeatmap() {
+    try {
+      const res = await api.get('/predictions/heatmap/data');
+      if (res.data?.points?.length > 0) setHeatmapPoints(res.data.points);
+    } catch {
+      // derive heatmap from predictions as fallback
+    }
+  }
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    await Promise.all([fetchPredictions(), fetchShelters(), fetchReports(), fetchHeatmap()]);
+    setIsRefreshing(false);
+  }
+
+  const handleZoneClick = useCallback((pred: any) => {
+    setSelectedPrediction(pred);
+  }, []);
+
+  // Fallback heatmap if API didn't return points yet
+  const effectiveHeatmap =
+    heatmapPoints.length > 0
+      ? heatmapPoints
+      : predictions.flatMap((p) =>
+          p.center?.lat ? [{ lat: p.center.lat, lng: p.center.lng, intensity: p.riskScore / 100 }] : []
+        );
+
+  if (!GMAPS_API_KEY || GMAPS_API_KEY === 'YOUR_API_KEY_HERE') {
+    return (
+      <div className={`relative flex items-center justify-center bg-slate-900 rounded-xl ${isFullscreen ? 'fixed inset-0 z-50' : 'h-[calc(100vh-7rem)]'}`}>
+        <div className="text-center p-8">
+          <div className="text-5xl mb-4">🗺️</div>
+          <h2 className="text-xl font-bold text-white mb-2">Google Maps API Key Required</h2>
+          <p className="text-slate-400 text-sm mb-4 max-w-md">
+            Add your API key to <code className="bg-slate-800 px-2 py-0.5 rounded text-cyan-400">frontend/.env</code>:
+          </p>
+          <div className="bg-slate-800 rounded-lg p-4 text-left font-mono text-sm text-emerald-400 mb-4">
+            VITE_GOOGLE_MAPS_API_KEY=your_key_here
+          </div>
+          <p className="text-slate-500 text-xs">Then restart the dev server with <code className="text-cyan-400">npm run dev</code></p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative ${isFullscreen ? 'fixed inset-0 z-50' : 'h-[calc(100vh-7rem)] rounded-xl overflow-hidden'}`}>
+      <APIProvider apiKey={GMAPS_API_KEY} libraries={['visualization']}>
+        <Map
+          mapId="geoguard-map"
+          defaultCenter={{ lat: 20.5937, lng: 78.9629 }}
+          defaultZoom={5}
+          gestureHandling="greedy"
+          disableDefaultUI={false}
+          zoomControl={true}
+          mapTypeControl={false}
+          streetViewControl={false}
+          fullscreenControl={false}
+          styles={DARK_STYLE}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <MapContent
+            activeMapLayers={activeMapLayers}
+            predictions={predictions}
+            shelters={shelters}
+            reports={reports}
+            heatmapPoints={effectiveHeatmap}
+            onZoneClick={handleZoneClick}
+          />
+        </Map>
+      </APIProvider>
+
+      {/* Layer Legend */}
       <MapLegend layers={activeMapLayers} toggleLayer={toggleMapLayer} />
 
-      {/* Zone Info Panel */}
+      {/* Zone Detail Panel */}
       <AnimatePresence>
         {selectedPrediction && (
           <ZoneInfoPanel
@@ -395,23 +645,35 @@ export default function MapView() {
         )}
       </AnimatePresence>
 
-      {/* Bottom Bar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2">
+      {/* Bottom Status Bar */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2">
         <div className="glass-card-static px-4 py-2 flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-slate-400">Live Feed Active</span>
+            <span className="text-xs text-slate-400">Google Maps • Live</span>
           </div>
           <div className="w-px h-4 bg-white/10" />
           <span className="text-xs text-slate-400">
-            {mockFloodZones.length} flood zones • {mockShelters.length} shelters • {mockReports.length} reports
+            {predictions.length} zones • {shelters.length} shelters • {reports.length} reports
           </span>
         </div>
+
+        <button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          title="Refresh data"
+          className="glass-card-static p-2 hover:bg-white/10 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={`text-slate-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+        </button>
+
         <button
           onClick={() => setIsFullscreen(!isFullscreen)}
           className="glass-card-static p-2 hover:bg-white/10 transition-colors"
         >
-          {isFullscreen ? <Minimize2 size={16} className="text-slate-400" /> : <Maximize2 size={16} className="text-slate-400" />}
+          {isFullscreen
+            ? <Minimize2 size={16} className="text-slate-400" />
+            : <Maximize2 size={16} className="text-slate-400" />}
         </button>
       </div>
     </div>

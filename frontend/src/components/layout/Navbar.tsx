@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
@@ -8,21 +8,21 @@ import {
   Search,
   Globe,
   ChevronDown,
-  AlertTriangle,
   X,
   User,
   LogOut,
   Settings,
+  Bot,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 import { getAlertSeverityColor, formatRelativeTime } from '../../utils/helpers';
 
 export default function Navbar() {
-  const { toggleSidebar, alerts, unreadAlertCount, user, isAuthenticated, logout } = useAppStore();
+  const { toggleSidebar, alerts, unreadAlertCount, user, logout } = useAppStore();
   const [showAlerts, setShowAlerts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const location = useLocation();
+
 
   const activeAlerts = alerts.filter((a) => a.isActive);
 
@@ -92,7 +92,16 @@ export default function Navbar() {
             <ChevronDown size={14} />
           </button>
 
-          {/* Alerts Bell */}
+          {/* AI Assistant Quick Launch */}
+          <Link
+            to="/app/assistant"
+            className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-blue-500/10 transition-colors text-sm text-slate-400 hover:text-blue-400 border border-transparent hover:border-blue-500/20"
+            title="AI Assistant"
+          >
+            <Bot size={16} />
+            <span className="hidden lg:inline text-xs font-medium">AI Assistant</span>
+          </Link>
+
           <div className="relative">
             <button
               onClick={() => {

@@ -9,7 +9,7 @@ import json
 import os
 
 from app.core.config import settings
-from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact
+from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact, weather
 from app.core.database import init_db
 
 
@@ -46,12 +46,12 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         print("Database initialized successfully.")
-        # Seed demo users
-        from app.api.v1.auth import seed_demo_users
+        # Seed all tables
+        from app.core.seeding import seed_all
         from app.core.database import async_session_maker
         async with async_session_maker() as session:
-            await seed_demo_users(session)
-        print("Demo users seeded successfully.")
+            await seed_all(session)
+        print("Database seeded successfully.")
     except Exception as e:
         print(f"Database initialization/seeding failed: {e}")
 
@@ -93,6 +93,7 @@ app.include_router(reports.router, prefix=f"{settings.API_PREFIX}/reports", tags
 app.include_router(shelters.router, prefix=f"{settings.API_PREFIX}/shelters", tags=["Shelters"])
 app.include_router(evacuation.router, prefix=f"{settings.API_PREFIX}/evacuation", tags=["Evacuation"])
 app.include_router(impact.router, prefix=f"{settings.API_PREFIX}/impact", tags=["Impact Assessment"])
+app.include_router(weather.router, prefix=f"{settings.API_PREFIX}/weather", tags=["Weather"])
 
 
 # WebSocket endpoint for real-time alerts

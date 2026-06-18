@@ -1,19 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  AlertTriangle, Bell, Filter, Clock, MapPin, ChevronRight,
-  Shield, X, Search,
+  AlertTriangle, Bell, Clock, MapPin, ChevronRight,
+  Search,
 } from 'lucide-react';
-import { mockAlerts } from '../data/mockData';
-import { getAlertSeverityColor, formatDate, formatTime, formatRelativeTime } from '../utils/helpers';
+import { useAppStore } from '../stores/useAppStore';
+import { getAlertSeverityColor, formatDate, formatTime } from '../utils/helpers';
 
-const severityOrder = { critical: 0, severe: 1, moderate: 2, advisory: 3 };
+const severityOrder: Record<string, number> = { extreme: 0, critical: 1, severe: 2, moderate: 3, advisory: 4 };
 
 export default function AlertsPage() {
+  const { alerts, fetchAlerts } = useAppStore();
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredAlerts = mockAlerts
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
+  const filteredAlerts = alerts
     .filter((a) => filter === 'all' || a.severity === filter)
     .filter((a) => 
       searchQuery === '' || 
@@ -24,6 +29,7 @@ export default function AlertsPage() {
 
   const severityIcon = (severity: string) => {
     switch (severity) {
+      case 'extreme': return '🔴';
       case 'critical': return '🔴';
       case 'severe': return '🟠';
       case 'moderate': return '🟡';
@@ -62,7 +68,7 @@ export default function AlertsPage() {
             className="input-field pl-10 text-sm"
           />
         </div>
-        {['all', 'critical', 'severe', 'moderate', 'advisory'].map((s) => (
+        {['all', 'extreme', 'severe', 'moderate', 'advisory'].map((s) => (
           <button
             key={s}
             onClick={() => setFilter(s)}

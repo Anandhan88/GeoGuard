@@ -8,14 +8,22 @@ from app.core.config import settings
 
 # Async SQLite requires check_same_thread=False
 connect_args = {}
+engine_kwargs = {}
+
 if settings.DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
+else:
+    # PostgreSQL: connection pooling
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_pre_ping"] = True
 
 # Create asynchronous engine
 engine = create_async_engine(
     settings.DATABASE_URL,
     connect_args=connect_args,
     echo=settings.DEBUG,
+    **engine_kwargs,
 )
 
 # Async session factory

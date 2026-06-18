@@ -1,32 +1,18 @@
 """
 GeoGuard AI - Citizen Reports API
 """
-from fastapi import APIRouter, Query, UploadFile, File, Form
+from fastapi import APIRouter, Query, Form, Depends, HTTPException
 from typing import Optional
 from datetime import datetime
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from app.core.database import get_db
+from app.models.models import CitizenReport, User
+from app.core.security import get_current_user
 
 router = APIRouter()
-
-REPORTS = [
-    {
-        "id": "report-001", "user_id": "user-101", "user_name": "Rajesh Kumar",
-        "type": "flood", "description": "Water level rising rapidly near Adyar bridge. 2 feet on road.",
-        "severity": 5, "verified": True, "location": {"lat": 13.0060, "lng": 80.2550},
-        "address": "Adyar Bridge, Chennai", "created_at": "2026-06-16T08:30:00Z", "upvotes": 142,
-    },
-    {
-        "id": "report-002", "user_id": "user-102", "user_name": "Priya Lakshmi",
-        "type": "road_blocked", "description": "Road blocked due to fallen tree and waterlogging.",
-        "severity": 4, "verified": True, "location": {"lat": 12.9830, "lng": 80.2200},
-        "address": "Velachery Main Road", "created_at": "2026-06-16T09:15:00Z", "upvotes": 98,
-    },
-    {
-        "id": "report-003", "user_id": "user-103", "user_name": "Murugan S",
-        "type": "power_outage", "description": "Power outage since 6 AM. Transformer submerged.",
-        "severity": 4, "verified": False, "location": {"lat": 13.0850, "lng": 80.2700},
-        "address": "Chetpet, Chennai", "created_at": "2026-06-16T09:45:00Z", "upvotes": 67,
-    },
-]
 
 
 @router.get("/")
@@ -35,16 +21,42 @@ async def list_reports(
     verified: Optional[bool] = Query(None),
     min_severity: Optional[int] = Query(None),
     limit: int = Query(50, le=100),
+    db: AsyncSession = Depends(get_db)
 ):
     """List citizen reports with filtering."""
-    results = REPORTS.copy()
+    query = select(CitizenReport).options(joinedload(CitizenReport.user))
     if report_type:
-        results = [r for r in results if r["type"] == report_type]
+        query = query.filter(CitizenReport.type == report_type)
     if verified is not None:
-        results = [r for r in results if r["verified"] == verified]
+        query = query.filter(CitizenReport.verified == verified)
     if min_severity:
-        results = [r for r in results if r["severity"] >= min_severity]
-    return {"reports": results[:limit], "total": len(results)}
+        query = query.filter(CitizenReport.severity >= min_severity)
+        
+    query = query.order_by(CitizenReport.created_at.desc())
+    result = await db.execute(query)
+    reports = result.scalars().unique().all()
+    
+    response = []
+    for r in reports:
+        lat = r.latitude if hasattr(r, 'latitude') and r.latitude is not None else 13.0
+        lng = r.longitude if hasattr(r, 'longitude') and r.longitude is not None else 80.0
+        user_name = r.user.name if r.user else "Anonymous"
+        response.append({
+            "id": r.id,
+            "userId": r.user_id,
+            "userName": user_name,
+            "type": r.type,
+            "description": r.description,
+            "severity": r.severity,
+            "imageUrl": r.image_url or "/demo/flood-1.jpg",
+            "verified": r.verified,
+            "location": {"lat": lat, "lng": lng},
+            "address": f"Chennai ({lat:.3f}, {lng:.3f})",
+            "createdAt": r.created_at.isoformat() + "Z" if r.created_at else None,
+            "upvotes": 0
+        })
+        
+    return {"reports": response[:limit], "total": len(response)}
 
 
 @router.post("/")
@@ -54,38 +66,105 @@ async def create_report(
     severity: int = Form(...),
     lat: float = Form(...),
     lng: float = Form(...),
-    address: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Submit a citizen report."""
-    new_report = {
-        "id": f"report-{len(REPORTS) + 1:03d}",
-        "user_id": "current-user",
-        "user_name": "Current User",
-        "type": report_type,
-        "description": description,
-        "severity": severity,
-        "verified": False,
-        "location": {"lat": lat, "lng": lng},
-        "address": address,
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "upvotes": 0,
+    new_report = CitizenReport(
+        user_id=current_user["id"],
+        type=report_type,
+        description=description,
+        severity=severity,
+        verified=False,
+        created_at=datetime.utcnow()
+    )
+    if hasattr(new_report, 'latitude'):
+        new_report.latitude = lat
+        new_report.longitude = lng
+        
+    db.add(new_report)
+    await db.commit()
+    await db.refresh(new_report)
+    
+    # Reload with user relationship
+    query = select(CitizenReport).options(joinedload(CitizenReport.user)).filter(CitizenReport.id == new_report.id)
+    res = await db.execute(query)
+    r = res.scalars().first()
+    
+    r_lat = r.latitude if hasattr(r, 'latitude') and r.latitude is not None else lat
+    r_lng = r.longitude if hasattr(r, 'longitude') and r.longitude is not None else lng
+    user_name = r.user.name if r.user else current_user.get("name", "User")
+    
+    return {
+        "status": "submitted",
+        "report": {
+            "id": r.id,
+            "userId": r.user_id,
+            "userName": user_name,
+            "type": r.type,
+            "description": r.description,
+            "severity": r.severity,
+            "verified": r.verified,
+            "location": {"lat": r_lat, "lng": r_lng},
+            "address": f"Chennai ({r_lat:.3f}, {r_lng:.3f})",
+            "createdAt": r.created_at.isoformat() + "Z",
+            "upvotes": 0
+        }
     }
-    REPORTS.append(new_report)
-    return {"status": "submitted", "report": new_report}
 
 
 @router.put("/{report_id}/verify")
-async def verify_report(report_id: str):
+async def verify_report(
+    report_id: str,
+    db: AsyncSession = Depends(get_db)
+):
     """Verify a citizen report (authority only)."""
-    report = next((r for r in REPORTS if r["id"] == report_id), None)
+    query = select(CitizenReport).options(joinedload(CitizenReport.user)).filter(CitizenReport.id == report_id)
+    result = await db.execute(query)
+    report = result.scalars().first()
     if not report:
-        return {"error": "Report not found"}
-    report["verified"] = True
-    return {"status": "verified", "report": report}
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    report.verified = True
+    await db.commit()
+    await db.refresh(report)
+    
+    lat = report.latitude if hasattr(report, 'latitude') and report.latitude is not None else 13.0
+    lng = report.longitude if hasattr(report, 'longitude') and report.longitude is not None else 80.0
+    user_name = report.user.name if report.user else "Anonymous"
+    
+    return {
+        "status": "verified",
+        "report": {
+            "id": report.id,
+            "userId": report.user_id,
+            "userName": user_name,
+            "type": report.type,
+            "description": report.description,
+            "severity": report.severity,
+            "verified": report.verified,
+            "location": {"lat": lat, "lng": lng},
+            "address": f"Chennai ({lat:.3f}, {lng:.3f})",
+            "createdAt": report.created_at.isoformat() + "Z",
+            "upvotes": 0
+        }
+    }
 
 
 @router.get("/heatmap")
-async def report_heatmap():
+async def report_heatmap(db: AsyncSession = Depends(get_db)):
     """Get report density heatmap."""
-    points = [{"lat": r["location"]["lat"], "lng": r["location"]["lng"], "intensity": r["severity"] / 5} for r in REPORTS]
+    query = select(CitizenReport)
+    result = await db.execute(query)
+    reports = result.scalars().all()
+    
+    points = []
+    for r in reports:
+        lat = r.latitude if hasattr(r, 'latitude') and r.latitude is not None else 13.0
+        lng = r.longitude if hasattr(r, 'longitude') and r.longitude is not None else 80.0
+        points.append({
+            "lat": lat,
+            "lng": lng,
+            "intensity": r.severity / 5
+        })
     return {"points": points}

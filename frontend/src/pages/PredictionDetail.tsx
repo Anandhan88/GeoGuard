@@ -2,9 +2,9 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Droplets, Users, Clock, Zap, TrendingUp,
-  TrendingDown, Minus, AlertTriangle, Shield,
+  TrendingDown, Minus, AlertTriangle,
 } from 'lucide-react';
-import { mockPredictions } from '../data/mockData';
+import { useAppStore } from '../stores/useAppStore';
 import { getRiskColor, getRiskBadgeClass, formatNumber, formatDate } from '../utils/helpers';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,7 +13,8 @@ import {
 
 export default function PredictionDetail() {
   const { id } = useParams();
-  const prediction = mockPredictions.find((p) => p.id === id) || mockPredictions[0];
+  const predictions = useAppStore((s) => s.predictions);
+  const prediction = predictions.find((p) => p.id === id) || predictions[0];
 
   const factorChartData = prediction.factors.map((f) => ({
     name: f.name.length > 15 ? f.name.slice(0, 15) + '…' : f.name,
@@ -112,7 +113,7 @@ export default function PredictionDetail() {
                   border: '1px solid rgba(148,163,184,0.1)',
                   borderRadius: '12px',
                 }}
-                formatter={(value: number) => [`${value}%`, 'Contribution']}
+                formatter={(value: any) => [`${value}%`, 'Contribution']}
               />
               <Bar dataKey="contribution" radius={[0, 4, 4, 0]}>
                 {factorChartData.map((_, index) => (

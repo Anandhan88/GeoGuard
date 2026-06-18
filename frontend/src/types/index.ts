@@ -123,7 +123,7 @@ export interface Shelter {
 
 // ===== Alerts =====
 
-export type AlertSeverity = 'critical' | 'severe' | 'moderate' | 'advisory';
+export type AlertSeverity = 'extreme' | 'critical' | 'severe' | 'moderate' | 'advisory';
 
 export interface Alert {
   id: string;

@@ -1,18 +1,12 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, Users, Building, TrendingUp, BarChart3, 
-  Truck, Activity, Shield, ChevronRight, MapPin, 
-  Droplets, ArrowUpRight, Target, DollarSign,
-  School, Heart, Wheat, Clock,
+  AlertTriangle, Users, Truck, Activity, Shield, MapPin, 
+  ArrowUpRight, Target, DollarSign,
 } from 'lucide-react';
+import { useAppStore } from '../stores/useAppStore';
 import {
-  mockDashboardStats, mockPredictions, mockImpactAssessments,
-  mockResourceAllocations, mockReports,
-} from '../data/mockData';
-import {
-  getRiskColor, getRiskBadgeClass, formatNumber, formatCurrency,
-  formatRelativeTime,
+  getRiskBadgeClass, formatNumber, formatCurrency,
 } from '../utils/helpers';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -20,42 +14,111 @@ import {
   PolarRadiusAxis,
 } from 'recharts';
 
-const RISK_COLORS = ['#ef4444', '#ef4444', '#f59e0b', '#06b6d4', '#10b981', '#10b981'];
-
-const resourceChartData = mockResourceAllocations.map((r) => ({
-  name: r.zoneName.split(' ')[0],
-  ambulances: r.ambulances,
-  boats: r.rescueBoats,
-  trucks: r.reliefTrucks,
-  medical: r.medicalTeams,
-}));
-
-const impactRadarData = mockImpactAssessments[0]
-  ? [
-      { subject: 'Population', value: mockImpactAssessments[0].humanRiskIndex },
-      { subject: 'Buildings', value: Math.min(100, (mockImpactAssessments[0].buildingsAtRisk / 50) | 0) },
-      { subject: 'Schools', value: Math.min(100, mockImpactAssessments[0].schoolsAffected * 8) },
-      { subject: 'Hospitals', value: Math.min(100, mockImpactAssessments[0].hospitalsAffected * 30) },
-      { subject: 'Agriculture', value: Math.min(100, (mockImpactAssessments[0].agriculturalAreaHa / 1.5) | 0) },
-      { subject: 'Economic', value: Math.min(100, (mockImpactAssessments[0].economicLossEstimate / 60) | 0) },
-    ]
-  : [];
-
-const reportTypeCounts = mockReports.reduce(
-  (acc, r) => {
-    acc[r.type] = (acc[r.type] || 0) + 1;
-    return acc;
-  },
-  {} as Record<string, number>
-);
-
-const reportPieData = Object.entries(reportTypeCounts).map(([name, value]) => ({
-  name: name.replace('_', ' '),
-  value,
-}));
 const PIE_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'];
 
 export default function AuthorityDashboard() {
+  const {
+    predictions,
+    reports,
+    stats,
+    fetchPredictions,
+    fetchReports,
+    fetchStats,
+    triggerPredictions,
+    isLoading
+  } = useAppStore();
+
+  useEffect(() => {
+    fetchPredictions();
+    fetchReports();
+    fetchStats();
+  }, []);
+
+  // Dynamic calculations based on state
+  const resourceChartData = predictions.map((p) => {
+    const boats = p.riskScore >= 80 ? 12 : p.riskScore >= 60 ? 8 : 2;
+    const ambulances = p.riskScore >= 80 ? 8 : p.riskScore >= 60 ? 5 : 1;
+    const trucks = p.riskScore >= 80 ? 6 : p.riskScore >= 60 ? 4 : 2;
+    const medical = p.riskScore >= 80 ? 4 : p.riskScore >= 60 ? 2 : 1;
+    return {
+      name: p.zoneName.split(' ')[0],
+      ambulances,
+      boats,
+      trucks,
+      medical,
+    };
+  });
+
+  const primaryPrediction = predictions.find(p => p.zoneId === 'zone-001') || predictions[0];
+  const impactRadarData = primaryPrediction
+    ? [
+        { subject: 'Population', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 500)) },
+        { subject: 'Buildings', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 12 / 20)) },
+        { subject: 'Schools', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 12 / 250 * 20)) },
+        { subject: 'Hospitals', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 12 / 1200 * 50)) },
+        { subject: 'Agriculture', value: Math.min(100, Math.round(primaryPrediction.predictedDepth * 30)) },
+        { subject: 'Economic', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 12 * 1.25 / 15)) },
+      ]
+    : [];
+
+  const reportTypeCounts = reports.reduce(
+    (acc, r) => {
+      acc[r.type] = (acc[r.type] || 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
+  const reportPieData = Object.entries(reportTypeCounts).map(([name, value]) => ({
+    name: name.replace('_', ' '),
+    value,
+  }));
+
+  const impactAssessments = predictions.map((p) => {
+    const popAffected = p.affectedPopulation;
+    const buildings = Math.round(popAffected / 12);
+    const schools = Math.max(0, Math.floor(buildings / 250));
+    const hospitals = Math.max(0, Math.floor(buildings / 1200));
+    const agri = Math.round(p.predictedDepth * 45);
+    const loss = Math.round(buildings * 1.25);
+    return {
+      zoneId: p.zoneId,
+      zoneName: p.zoneName,
+      populationAffected: popAffected,
+      buildingsAtRisk: buildings,
+      schoolsAffected: schools,
+      hospitalsAffected: hospitals,
+      agriculturalAreaHa: agri,
+      impactScore: p.riskScore,
+      economicLossEstimate: loss,
+    };
+  });
+
+  const resourceAllocations = predictions.map((p) => {
+    const boats = p.riskScore >= 80 ? 12 : p.riskScore >= 60 ? 8 : 2;
+    const ambulances = p.riskScore >= 80 ? 8 : p.riskScore >= 60 ? 5 : 1;
+    const trucks = p.riskScore >= 80 ? 6 : p.riskScore >= 60 ? 4 : 2;
+    const medical = p.riskScore >= 80 ? 4 : p.riskScore >= 60 ? 2 : 1;
+    return {
+      zoneId: p.zoneId,
+      zoneName: p.zoneName,
+      ambulances,
+      rescueBoats: boats,
+      reliefTrucks: trucks,
+      medicalTeams: medical,
+      totalPersonnel: (boats + ambulances + trucks + medical) * 10,
+      severity: p.riskLevel,
+    };
+  });
+
+  const handleGeneratePredictions = async () => {
+    try {
+      await triggerPredictions();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-[1600px]">
       {/* Header */}
@@ -70,8 +133,12 @@ export default function AuthorityDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="btn-primary text-xs py-2">
-            <Target size={14} /> Generate Predictions
+          <button 
+            onClick={handleGeneratePredictions} 
+            className="btn-primary text-xs py-2"
+            disabled={isLoading}
+          >
+            <Target size={14} /> {isLoading ? 'Running Simulation...' : 'Generate Predictions'}
           </button>
           <button className="btn-danger text-xs py-2">
             <AlertTriangle size={14} /> Issue Alert
@@ -82,12 +149,12 @@ export default function AuthorityDashboard() {
       {/* Quick Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {[
-          { label: 'Risk Score (Avg)', value: '67', color: '#f59e0b', icon: Activity },
-          { label: 'Zones at Risk', value: '12', color: '#ef4444', icon: AlertTriangle },
-          { label: 'Pop. Affected', value: '284.5K', color: '#3b82f6', icon: Users },
-          { label: 'Resources Deployed', value: '89', color: '#10b981', icon: Truck },
-          { label: 'Est. Loss', value: '₹135 Cr', color: '#8b5cf6', icon: DollarSign },
-          { label: 'Reports Today', value: '47', color: '#06b6d4', icon: MapPin },
+          { label: 'Risk Score (Avg)', value: `${stats.avgRiskScore}%`, color: '#f59e0b', icon: Activity },
+          { label: 'Zones at Risk', value: stats.zonesAtRisk.toString(), color: '#ef4444', icon: AlertTriangle },
+          { label: 'Pop. Affected', value: formatNumber(stats.populationAffected), color: '#3b82f6', icon: Users },
+          { label: 'Resources Deployed', value: stats.resourcesDeployed.toString(), color: '#10b981', icon: Truck },
+          { label: 'Est. Loss', value: `₹${(stats.populationAffected / 12 * 1.25 / 100).toFixed(1)} Cr`, color: '#8b5cf6', icon: DollarSign },
+          { label: 'Reports Today', value: stats.citizenReports.toString(), color: '#06b6d4', icon: MapPin },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -225,8 +292,8 @@ export default function AuthorityDashboard() {
               </tr>
             </thead>
             <tbody>
-              {mockImpactAssessments.map((impact, i) => {
-                const pred = mockPredictions.find((p) => p.zoneId === impact.zoneId);
+              {impactAssessments.map((impact, i) => {
+                const pred = predictions.find((p) => p.zoneId === impact.zoneId);
                 return (
                   <motion.tr
                     key={impact.zoneId}
@@ -281,7 +348,7 @@ export default function AuthorityDashboard() {
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {mockResourceAllocations.map((alloc, i) => (
+          {resourceAllocations.map((alloc, i) => (
             <motion.div
               key={alloc.zoneId}
               initial={{ opacity: 0, y: 10 }}
