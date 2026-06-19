@@ -5,7 +5,6 @@ import {
   ChevronRight, ArrowRight, Zap, Route, Info, CheckCircle,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
-import { mockEvacuationRoutes } from '../data/mockData';
 import { formatNumber } from '../utils/helpers';
 import { Link } from 'react-router-dom';
 
@@ -17,12 +16,13 @@ const RISK_GRADIENT: Record<string, string> = {
 };
 
 export default function EvacuationPage() {
-  const { predictions, shelters, fetchPredictions, fetchShelters } = useAppStore();
+  const { predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes } = useAppStore();
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPredictions();
     fetchShelters();
+    fetchEvacuationRoutes();
   }, []);
 
   const criticalPredictions = predictions
@@ -32,11 +32,21 @@ export default function EvacuationPage() {
   const selectedPred = criticalPredictions.find((p) => p.zoneId === selectedZone) || criticalPredictions[0];
 
   // Get matching evacuation route for selected zone
-  const matchingRoute = mockEvacuationRoutes.find(
-    (r) => selectedPred && r.name.toLowerCase().includes(selectedPred.zoneName.split(' ')[0].toLowerCase())
-  ) || mockEvacuationRoutes[0];
+  const matchingRoute = evacuationRoutes.find(
+    (r) => selectedPred && (r.name || r.shelter_name || '').toLowerCase().includes(selectedPred.zoneName.split(' ')[0].toLowerCase())
+  ) || evacuationRoutes[0];
 
-  // Get best shelter (least full)
+  // Normalize route fields (backend uses snake_case, mock uses camelCase)
+  const route = matchingRoute ? {
+    name: matchingRoute.name,
+    shelterName: (matchingRoute as any).shelterName || (matchingRoute as any).shelter_name || '',
+    distance: (matchingRoute as any).distance || (matchingRoute as any).distance_km || 0,
+    estimatedTime: (matchingRoute as any).estimatedTime || (matchingRoute as any).estimated_time_min || 0,
+    riskAlongRoute: (matchingRoute as any).riskAlongRoute || (matchingRoute as any).risk_along_route || 0,
+    isRecommended: (matchingRoute as any).isRecommended || (matchingRoute as any).is_recommended || false,
+    waypoints: (matchingRoute as any).waypoints || [],
+    avoidedZones: (matchingRoute as any).avoidedZones || (matchingRoute as any).avoided_zones || [],
+  } : null;
   const bestShelter = shelters
     .filter((s) => s.currentOccupancy < s.capacity)
     .sort((a, b) => (a.currentOccupancy / a.capacity) - (b.currentOccupancy / b.capacity))[0];
@@ -140,8 +150,7 @@ export default function EvacuationPage() {
 
         {/* Evacuation Route Details */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Recommended Route */}
-          {matchingRoute && (
+          {route && (
             <div className="glass-card-static p-6">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
@@ -149,9 +158,9 @@ export default function EvacuationPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-white">Recommended Evacuation Route</h2>
-                  <p className="text-xs text-slate-500">{matchingRoute.name}</p>
+                  <p className="text-xs text-slate-500">{route.name}</p>
                 </div>
-                {matchingRoute.isRecommended && (
+                {route.isRecommended && (
                   <span className="ml-auto text-xs text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded-full">
                     <CheckCircle size={11} /> AI Recommended
                   </span>
@@ -174,7 +183,7 @@ export default function EvacuationPage() {
                   {/* Route line with waypoints */}
                   <div className="flex-1 mx-2 relative">
                     <div className="h-1 bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 rounded-full" />
-                    {matchingRoute.waypoints.slice(0, 3).map((_, i) => (
+                    {route.waypoints.slice(0, 3).map((_: any, i: number) => (
                       <div
                         key={i}
                         className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-amber-500 border-2 border-bg-primary"
@@ -183,7 +192,7 @@ export default function EvacuationPage() {
                     ))}
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 whitespace-nowrap">
                       <ArrowRight size={10} className="text-slate-500" />
-                      <span className="text-[10px] text-slate-500">{matchingRoute.distance} km · ~{matchingRoute.estimatedTime} min</span>
+                      <span className="text-[10px] text-slate-500">{route.distance} km · ~{route.estimatedTime} min</span>
                     </div>
                   </div>
 
@@ -200,9 +209,9 @@ export default function EvacuationPage() {
               {/* Route Stats */}
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {[
-                  { icon: Clock, color: '#06b6d4', label: 'Est. Time', value: `~${matchingRoute.estimatedTime} min` },
-                  { icon: MapPin, color: '#3b82f6', label: 'Distance', value: `${matchingRoute.distance} km` },
-                  { icon: Shield, color: '#10b981', label: 'Route Risk', value: `${matchingRoute.riskAlongRoute}%` },
+                  { icon: Clock, color: '#06b6d4', label: 'Est. Time', value: `~${route.estimatedTime} min` },
+                  { icon: MapPin, color: '#3b82f6', label: 'Distance', value: `${route.distance} km` },
+                  { icon: Shield, color: '#10b981', label: 'Route Risk', value: `${route.riskAlongRoute}%` },
                 ].map((s) => (
                   <div key={s.label} className="p-3 rounded-xl bg-white/[0.03] text-center">
                     <s.icon size={16} style={{ color: s.color }} className="mx-auto mb-1" />
@@ -213,18 +222,20 @@ export default function EvacuationPage() {
               </div>
 
               {/* Avoided Zones */}
-              <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
-                <p className="text-xs text-amber-400 font-semibold mb-2">
-                  ⚠️ Areas Avoided Along This Route:
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {matchingRoute.avoidedZones?.map((zone) => (
-                    <span key={zone} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      🚫 {zone}
-                    </span>
-                  ))}
+              {route.avoidedZones?.length > 0 && (
+                <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
+                  <p className="text-xs text-amber-400 font-semibold mb-2">
+                    ⚠️ Areas Avoided Along This Route:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {route.avoidedZones.map((zone: string) => (
+                      <span key={zone} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        🚫 {zone}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

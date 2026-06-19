@@ -15,14 +15,19 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function WeatherPage() {
   const [weather, setWeather] = useState<any>(mockWeatherData);
+  const [stations, setStations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  const fetchWeather = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/weather/current');
-      setWeather(res.data);
+      const [wRes, sRes] = await Promise.all([
+        api.get('/weather/current'),
+        api.get('/weather/stations'),
+      ]);
+      setWeather(wRes.data);
+      setStations(sRes.data.stations || []);
       setLastUpdated(new Date());
     } catch (e) {
       setWeather(mockWeatherData);
@@ -32,12 +37,11 @@ export default function WeatherPage() {
   };
 
   useEffect(() => {
-    fetchWeather();
-    const interval = setInterval(fetchWeather, 60000); // refresh every 60s
+    fetchAll();
+    const interval = setInterval(fetchAll, 60000);
     return () => clearInterval(interval);
   }, []);
 
-  // Build hourly chart data from mockData rainfallForecast or weather data
   const hourlyData = weather.hourlyForecast || [
     { time: '6AM', rainfall: 12, predicted: false },
     { time: '9AM', rainfall: 28, predicted: false },
@@ -66,11 +70,7 @@ export default function WeatherPage() {
             {loading ? 'Updating...' : `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
           </p>
         </div>
-        <button
-          onClick={fetchWeather}
-          disabled={loading}
-          className="btn-secondary text-xs py-2 gap-2"
-        >
+        <button onClick={fetchAll} disabled={loading} className="btn-secondary text-xs py-2 gap-2">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
@@ -88,7 +88,7 @@ export default function WeatherPage() {
         </motion.div>
       )}
 
-      {/* Current conditions + 5-day side-by-side */}
+      {/* Current conditions + 5-day */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Current Conditions */}
         <div className="lg:col-span-1 glass-card-static p-6">
@@ -102,8 +102,6 @@ export default function WeatherPage() {
               Feels like {weather.feelsLike || Math.round(weather.temperature + 7)}°C
             </div>
           </div>
-
-          {/* Metrics grid */}
           <div className="grid grid-cols-2 gap-3">
             {[
               { icon: Droplets, label: 'Rainfall', value: `${weather.rainfall} mm`, color: '#3b82f6' },
@@ -131,35 +129,32 @@ export default function WeatherPage() {
             {forecast.slice(0, 5).map((day: any, i: number) => {
               const date = new Date(day.date);
               const dayName = i === 0 ? 'Today' : DAYS[date.getDay()];
-              const rainIntensity = day.rainfall > 70 ? '#ef4444' : day.rainfall > 40 ? '#f59e0b' : '#10b981';
+              const rainColor = day.rainfall > 70 ? '#ef4444' : day.rainfall > 40 ? '#f59e0b' : '#10b981';
               return (
                 <motion.div
                   key={day.date}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.08 }}
-                  className={`flex flex-col items-center p-4 rounded-xl border transition-all ${
-                    i === 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/[0.02] border-white/5'
-                  }`}
+                  className={`flex flex-col items-center p-4 rounded-xl border ${i === 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/[0.02] border-white/5'}`}
                 >
                   <p className="text-xs font-semibold text-slate-400">{dayName}</p>
                   <p className="text-3xl my-3">{day.icon}</p>
                   <p className="text-sm font-bold text-white">{day.tempHigh}°</p>
                   <p className="text-xs text-slate-500">{day.tempLow}°</p>
                   <div className="mt-2 flex items-center gap-1">
-                    <Droplets size={10} style={{ color: rainIntensity }} />
-                    <span className="text-[10px]" style={{ color: rainIntensity }}>{day.rainfall}mm</span>
+                    <Droplets size={10} style={{ color: rainColor }} />
+                    <span className="text-[10px]" style={{ color: rainColor }}>{day.rainfall}mm</span>
                   </div>
                 </motion.div>
               );
             })}
           </div>
 
-          {/* Hourly Rainfall Chart */}
+          {/* Hourly chart */}
           <div className="mt-6">
-            <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-              Hourly Rainfall Forecast
-              <span className="text-[10px] text-slate-500">(actual vs predicted)</span>
+            <h3 className="text-sm font-semibold text-white mb-3">
+              Hourly Rainfall Forecast <span className="text-[10px] text-slate-500">(actual vs predicted)</span>
             </h3>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={hourlyData} margin={{ left: -10 }}>
@@ -177,66 +172,90 @@ export default function WeatherPage() {
                 <XAxis dataKey="time" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  contentStyle={{
-                    background: 'rgba(15,23,42,0.95)',
-                    border: '1px solid rgba(148,163,184,0.1)',
-                    borderRadius: '12px',
-                  }}
+                  contentStyle={{ background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '12px' }}
                   formatter={(value: any) => [`${value} mm/hr`, 'Rainfall']}
                 />
                 <Bar dataKey="rainfall" radius={[3, 3, 0, 0]}>
                   {hourlyData.map((entry: any, index: number) => (
-                    <Cell
-                      key={index}
-                      fill={entry.predicted ? 'url(#predGrad)' : 'url(#rainGrad)'}
-                    />
+                    <Cell key={index} fill={entry.predicted ? 'url(#predGrad)' : 'url(#rainGrad)'} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
             <div className="flex items-center gap-4 mt-2">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-blue-500" />
-                <span className="text-[10px] text-slate-400">Actual</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm bg-cyan-500 opacity-60" />
-                <span className="text-[10px] text-slate-400">Predicted</span>
-              </div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-blue-500" /><span className="text-[10px] text-slate-400">Actual</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm bg-cyan-500 opacity-60" /><span className="text-[10px] text-slate-400">Predicted</span></div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Weather Risk Impact Summary */}
+      {/* Live Weather Stations */}
+      {stations.length > 0 && (
+        <div className="glass-card-static p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-semibold text-white">IMD Weather Stations</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Live readings from monitoring stations across Chennai</p>
+            </div>
+            <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {stations.map((st: any, i: number) => (
+              <motion.div
+                key={st.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06 }}
+                className="p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <MapPin size={13} className="text-blue-400" />
+                  <span className="text-[9px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">Live</span>
+                </div>
+                <p className="text-sm font-semibold text-white leading-tight mb-3">{st.name}</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: 'Rainfall', value: `${st.rainfall} mm`, color: '#3b82f6', Icon: Droplets },
+                    { label: 'Wind', value: `${st.windSpeed} km/h`, color: '#8b5cf6', Icon: Wind },
+                    { label: 'Temp', value: `${st.temperature}°C`, color: '#f59e0b', Icon: Thermometer },
+                    { label: 'Humidity', value: `${st.humidity}%`, color: '#06b6d4', Icon: Activity },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1"><row.Icon size={9} /> {row.label}</span>
+                      <span style={{ color: row.color }} className="font-medium">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3">
+                  <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(100, st.rainfall)}%` }}
+                      transition={{ duration: 1, ease: 'easeOut', delay: i * 0.1 }}
+                    />
+                  </div>
+                  <p className="text-[9px] text-slate-600 mt-1">{st.rainfall} / 100mm threshold</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Weather Risk Summary */}
       <div className="glass-card-static p-6">
         <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-          <AlertTriangle size={18} className="text-amber-400" />
-          Weather-Driven Risk Summary
+          <AlertTriangle size={18} className="text-amber-400" /> Weather-Driven Risk Summary
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
-            {
-              title: 'Flash Flood Risk',
-              value: 'Very High',
-              pct: 88,
-              color: '#ef4444',
-              desc: 'Rainfall exceeds 65mm/hr. Rivers near danger level.',
-            },
-            {
-              title: 'Road Inundation',
-              value: 'High',
-              pct: 72,
-              color: '#f59e0b',
-              desc: 'Low-lying areas and underpasses at risk of waterlogging.',
-            },
-            {
-              title: 'Power Outage Risk',
-              value: 'Moderate',
-              pct: 51,
-              color: '#06b6d4',
-              desc: 'High winds may affect overhead power infrastructure.',
-            },
+            { title: 'Flash Flood Risk', value: 'Very High', pct: 88, color: '#ef4444', desc: 'Rainfall exceeds 65mm/hr. Rivers near danger level.' },
+            { title: 'Road Inundation', value: 'High', pct: 72, color: '#f59e0b', desc: 'Low-lying areas and underpasses at risk of waterlogging.' },
+            { title: 'Power Outage Risk', value: 'Moderate', pct: 51, color: '#06b6d4', desc: 'High winds may affect overhead power infrastructure.' },
           ].map((risk) => (
             <div key={risk.title} className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
               <div className="flex items-center justify-between mb-2">

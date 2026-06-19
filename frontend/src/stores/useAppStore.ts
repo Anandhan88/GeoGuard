@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { User, Alert, FloodPrediction, Shelter, CitizenReport, DashboardStats } from '../types';
-import { mockAlerts, mockPredictions, mockShelters, mockReports, mockDashboardStats } from '../data/mockData';
+import type { User, Alert, FloodPrediction, Shelter, CitizenReport, DashboardStats, WeatherData, EvacuationRoute } from '../types';
+import { mockAlerts, mockPredictions, mockShelters, mockReports, mockDashboardStats, mockWeatherData, mockEvacuationRoutes } from '../data/mockData';
 import { api } from '../utils/api';
 
 interface AppState {
@@ -45,6 +45,14 @@ interface AppState {
   fetchReports: () => Promise<void>;
   submitReport: (formData: FormData) => Promise<void>;
   verifyReport: (reportId: string) => Promise<void>;
+
+  // Weather
+  weather: WeatherData | null;
+  fetchWeather: () => Promise<void>;
+
+  // Evacuation
+  evacuationRoutes: EvacuationRoute[];
+  fetchEvacuationRoutes: () => Promise<void>;
 
   // Stats
   stats: DashboardStats;
@@ -290,6 +298,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().fetchReports();
     } catch (err) {
       set({ isLoading: false });
+    }
+  },
+
+  // Weather
+  weather: null,
+  fetchWeather: async () => {
+    try {
+      const res = await api.get('/weather/current');
+      set({ weather: res.data });
+    } catch {
+      set({ weather: mockWeatherData });
+    }
+  },
+
+  // Evacuation
+  evacuationRoutes: mockEvacuationRoutes,
+  fetchEvacuationRoutes: async () => {
+    try {
+      const res = await api.get('/evacuation/routes');
+      const routes = res.data.routes;
+      set({ evacuationRoutes: routes.length > 0 ? routes : mockEvacuationRoutes });
+    } catch {
+      set({ evacuationRoutes: mockEvacuationRoutes });
     }
   },
 

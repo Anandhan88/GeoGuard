@@ -17,6 +17,7 @@ import {
   Satellite,
   Cloud,
   Radio,
+  FileText,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 
@@ -24,7 +25,7 @@ const navItems = [
   { label: 'Overview', icon: LayoutDashboard, path: '/app/citizen', section: 'main' },
   { label: 'Disaster Map', icon: Map, path: '/app/map', section: 'main' },
   { label: 'Alerts', icon: AlertTriangle, path: '/app/alerts', section: 'main', badge: 7 },
-  { label: 'Submit Report', icon: MessageSquare, path: '/app/citizen/report', section: 'main' },
+  { label: 'Submit Report', icon: FileText, path: '/app/citizen/report', section: 'main' },
   { label: 'Authority View', icon: Shield, path: '/app/authority', section: 'main' },
   { label: 'Predictions', icon: Activity, path: '/app/citizen', section: 'intelligence' },
   { label: 'Satellite', icon: Satellite, path: '/app/satellite', section: 'intelligence' },

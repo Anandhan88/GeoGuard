@@ -159,7 +159,8 @@ async def seed_all(db: AsyncSession):
 
     # 4. Seed Alerts
     result = await db.execute(select(Alert))
-    if not result.scalars().first():
+    existing_alerts = result.scalars().all()
+    if not existing_alerts:
         alerts = [
             Alert(
                 id="alert-001",
@@ -168,7 +169,7 @@ async def seed_all(db: AsyncSession):
                 message="RED ALERT: Severe Flooding Expected - Adyar River Basin. Extreme rainfall combined with rising river levels expected to cause severe flooding. Immediate evacuation recommended.",
                 target_zone_id="zone-001",
                 created_at=datetime.utcnow() - timedelta(hours=2),
-                expires_at=datetime.utcnow() + timedelta(days=2)
+                expires_at=datetime.utcnow() + timedelta(days=30)
             ),
             Alert(
                 id="alert-002",
@@ -177,7 +178,7 @@ async def seed_all(db: AsyncSession):
                 message="ORANGE ALERT: Flooding Risk - Velachery Area. Significant water accumulation expected in Velachery low-lying areas. Move valuables to upper floors.",
                 target_zone_id="zone-003",
                 created_at=datetime.utcnow() - timedelta(hours=1),
-                expires_at=datetime.utcnow() + timedelta(days=1)
+                expires_at=datetime.utcnow() + timedelta(days=30)
             ),
             Alert(
                 id="alert-003",
@@ -186,13 +187,18 @@ async def seed_all(db: AsyncSession):
                 message="ORANGE ALERT: Very Heavy Rainfall Warning. IMD has issued very heavy rainfall warning for Chennai. Expected 150-200mm in next 24 hours.",
                 target_zone_id=None,
                 created_at=datetime.utcnow() - timedelta(hours=3),
-                expires_at=datetime.utcnow() + timedelta(hours=18)
+                expires_at=datetime.utcnow() + timedelta(days=30)
             )
         ]
         for a in alerts:
             if hasattr(a, 'area_json'):
                 a.area_json = {"type": "Polygon", "coordinates": []}
             db.add(a)
+    else:
+        # Refresh expired alerts — extend to 30 days from now
+        for a in existing_alerts:
+            if a.expires_at and a.expires_at < datetime.utcnow():
+                a.expires_at = datetime.utcnow() + timedelta(days=30)
 
     # 5. Seed Shelters
     result = await db.execute(select(Shelter))
