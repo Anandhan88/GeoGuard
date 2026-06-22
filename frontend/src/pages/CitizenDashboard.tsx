@@ -105,11 +105,13 @@ export default function CitizenDashboard() {
     shelters,
     reports,
     stats,
+    weather: liveWeather,
     fetchPredictions,
     fetchAlerts,
     fetchShelters,
     fetchReports,
-    fetchStats
+    fetchStats,
+    fetchWeather
   } = useAppStore();
 
   useEffect(() => {
@@ -118,9 +120,15 @@ export default function CitizenDashboard() {
     fetchShelters();
     fetchReports();
     fetchStats();
+    fetchWeather();
   }, []);
 
-  const weather = mockWeatherData;
+  const weather = liveWeather || mockWeatherData;
+  const chartData = weather.hourlyForecast?.map((h: any) => ({
+    time: h.time,
+    actual: h.predicted ? null : h.rainfall,
+    predicted: h.predicted ? h.rainfall : null
+  })) || rainfallData;
   const topPredictions = predictions.slice(0, 4);
   const recentAlerts = alerts.slice(0, 3);
   const nearbyShelters = shelters.slice(0, 3);
@@ -230,7 +238,7 @@ export default function CitizenDashboard() {
               </div>
             </div>
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={rainfallData}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="gradientActual" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />

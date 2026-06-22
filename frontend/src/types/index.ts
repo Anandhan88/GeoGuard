@@ -64,6 +64,13 @@ export interface HeatmapPoint {
 
 // ===== Weather =====
 
+export interface HourlyForecast {
+  time: string;
+  timestamp: string;
+  rainfall: number;
+  predicted: boolean;
+}
+
 export interface WeatherData {
   temperature: number;
   humidity: number;
@@ -75,6 +82,7 @@ export interface WeatherData {
   condition: string;
   icon: string;
   forecast: WeatherForecast[];
+  hourlyForecast?: HourlyForecast[];
 }
 
 export interface WeatherForecast {
