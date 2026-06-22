@@ -2,21 +2,72 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   AlertTriangle, Bell, Clock, MapPin, ChevronRight,
-  Search,
+  Search, X, Radio
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { useAppStore } from '../stores/useAppStore';
 import { getAlertSeverityColor, formatDate, formatTime } from '../utils/helpers';
 
-const severityOrder: Record<string, number> = { extreme: 0, critical: 1, severe: 2, moderate: 3, advisory: 4 };
 
 export default function AlertsPage() {
-  const { alerts, fetchAlerts } = useAppStore();
+  const { alerts, fetchAlerts, user, predictions, fetchPredictions, createAlert, isLoading } = useAppStore();
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [alertType, setAlertType] = useState('Flood Warning');
+  const [customType, setCustomType] = useState('');
+  const [severity, setSeverity] = useState('severe');
+  const [targetZone, setTargetZone] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     fetchAlerts();
+    fetchPredictions();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setShowCreateModal(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleCreateAlert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) {
+      toast.error('Alert message is required');
+      return;
+    }
+    const finalType = alertType === 'Custom' ? customType : alertType;
+    if (alertType === 'Custom' && !customType.trim()) {
+      toast.error('Please specify alert type');
+      return;
+    }
+
+    try {
+      await createAlert({
+        alert_type: finalType,
+        severity,
+        message,
+        target_zone: targetZone || undefined
+      });
+      toast.success('Alert broadcasted successfully!');
+      setShowCreateModal(false);
+      setMessage('');
+      setCustomType('');
+      setTargetZone('');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to issue alert');
+    }
+  };
+
+  const zones = predictions.map(p => ({ id: p.zoneId, name: p.zoneName }));
+  const uniqueZones = Array.from(new Map(zones.map(z => [z.id, z])).values());
+  const role = user?.role || 'citizen';
 
   const filteredAlerts = alerts
     .filter((a) => filter === 'all' || a.severity === filter)
@@ -25,7 +76,7 @@ export default function AlertsPage() {
       a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       a.message.toLowerCase().includes(searchQuery.toLowerCase())
     )
-    .sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+    .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
 
   const severityIcon = (severity: string) => {
     switch (severity) {
@@ -51,9 +102,11 @@ export default function AlertsPage() {
             {filteredAlerts.length} active alerts across Chennai Metropolitan Area
           </p>
         </div>
-        <button className="btn-danger text-xs py-2">
-          <AlertTriangle size={14} /> Issue New Alert
-        </button>
+        {role === 'authority' && (
+          <button onClick={() => setShowCreateModal(true)} className="btn-danger text-xs py-2">
+            <AlertTriangle size={14} /> Issue New Alert
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -169,6 +222,137 @@ export default function AlertsPage() {
           );
         })}
       </div>
+
+      {/* Alert Creation Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-lg glass-card-static overflow-hidden shadow-2xl border border-white/10"
+          >
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="text-red-500 animate-pulse" size={20} />
+                Issue Official Alert
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateAlert} className="p-6 space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 uppercase tracking-wider mb-1.5 block font-semibold">
+                  Alert Type
+                </label>
+                <select
+                  value={alertType}
+                  onChange={(e) => setAlertType(e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="Flood Warning">Flood Warning</option>
+                  <option value="Heavy Rainfall">Heavy Rainfall</option>
+                  <option value="Evacuation Order">Evacuation Order</option>
+                  <option value="Storm Surge">Storm Surge</option>
+                  <option value="Infrastructure Advisory">Infrastructure Advisory</option>
+                  <option value="Custom">Custom Alert Type...</option>
+                </select>
+              </div>
+
+              {alertType === 'Custom' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                >
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-1.5 block font-semibold">
+                    Specify Custom Type
+                  </label>
+                  <input
+                    type="text"
+                    value={customType}
+                    onChange={(e) => setCustomType(e.target.value)}
+                    placeholder="e.g. Extreme Winds"
+                    className="input-field text-sm"
+                  />
+                </motion.div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-1.5 block font-semibold">
+                    Severity
+                  </label>
+                  <select
+                    value={severity}
+                    onChange={(e) => setSeverity(e.target.value)}
+                    className="input-field text-sm"
+                  >
+                    <option value="advisory">🔵 Advisory</option>
+                    <option value="moderate">🟡 Moderate</option>
+                    <option value="severe">🟠 Severe</option>
+                    <option value="critical">🔴 Critical</option>
+                    <option value="extreme">🔴 Extreme</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-400 uppercase tracking-wider mb-1.5 block font-semibold">
+                    Target Zone
+                  </label>
+                  <select
+                    value={targetZone}
+                    onChange={(e) => setTargetZone(e.target.value)}
+                    className="input-field text-sm"
+                  >
+                    <option value="">All of Chennai</option>
+                    {uniqueZones.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 uppercase tracking-wider mb-1.5 block font-semibold">
+                  Official Message
+                </label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Enter the official safety instructions and information..."
+                  rows={4}
+                  className="input-field text-sm resize-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="btn-secondary flex-1 justify-center py-2.5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="btn-danger flex-1 justify-center py-2.5 flex items-center gap-2"
+                >
+                  <Radio size={16} className={isLoading ? 'animate-pulse' : 'animate-ping'} />
+                  {isLoading ? 'Broadcasting...' : 'Broadcast Alert'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

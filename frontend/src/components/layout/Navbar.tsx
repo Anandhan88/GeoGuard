@@ -16,20 +16,41 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 import { getAlertSeverityColor, formatRelativeTime } from '../../utils/helpers';
+import { useTranslation } from '../../utils/translations';
 
 export default function Navbar() {
-  const { toggleSidebar, alerts, unreadAlertCount, user, logout } = useAppStore();
+  const { t, lang } = useTranslation();
+  const { toggleSidebar, alerts, unreadAlertCount, user, logout, setLanguage, updateProfile } = useAppStore();
   const [showAlerts, setShowAlerts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Profile settings modal states
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [profileLang, setProfileLang] = useState<'en' | 'ta' | 'hi'>('en');
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-
-  const activeAlerts = alerts.filter((a) => a.isActive);
+  const activeAlerts = [...alerts]
+    .filter((a) => a.isActive)
+    .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
 
   const currentUser = user || {
     name: 'Anandhan S',
     role: 'authority',
     email: 'anandhan@geoguard.ai',
+    phone: '',
+    languagePref: 'en',
+  };
+
+  const openProfileModal = () => {
+    setProfileName(currentUser.name);
+    setProfilePhone(currentUser.phone || '');
+    setProfileLang((currentUser.languagePref as any) || 'en');
+    setShowProfileModal(true);
+    setShowProfile(false); // Close dropdown
   };
 
   return (
@@ -53,7 +74,7 @@ export default function Navbar() {
               <h1 className="text-base font-bold text-white leading-tight">
                 GeoGuard<span className="text-cyan-400"> AI</span>
               </h1>
-              <p className="text-[10px] text-slate-500 leading-tight">Disaster Intelligence Platform</p>
+              <p className="text-[10px] text-slate-500 leading-tight">{t('disaster_intelligence')}</p>
             </div>
           </Link>
         </div>
@@ -66,7 +87,7 @@ export default function Navbar() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search zones, alerts, reports..."
+              placeholder={t('search_placeholder')}
               className="input-field pl-10 pr-4 py-2 text-sm bg-white/5"
               id="global-search"
             />
@@ -80,26 +101,78 @@ export default function Navbar() {
             <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 mr-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               <span className="text-xs text-red-400 font-medium">
-                {activeAlerts.length} Active Alert{activeAlerts.length > 1 ? 's' : ''}
+                {activeAlerts.length} {t('active_alerts')}
               </span>
             </div>
           )}
 
-          {/* Language Selector */}
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-sm text-slate-400">
-            <Globe size={16} />
-            <span className="hidden md:inline">EN</span>
-            <ChevronDown size={14} />
-          </button>
+          {/* Language Selector Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowLanguageDropdown(!showLanguageDropdown);
+                setShowAlerts(false);
+                setShowProfile(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-sm text-slate-400"
+            >
+              <Globe size={16} />
+              <span className="hidden md:inline uppercase">{lang}</span>
+              <ChevronDown size={14} />
+            </button>
+
+            <AnimatePresence>
+              {showLanguageDropdown && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute right-0 mt-2 w-40 glass-card-static p-1 border border-white/5"
+                >
+                  <button
+                    onClick={() => {
+                      setLanguage('en');
+                      setShowLanguageDropdown(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-left text-sm ${lang === 'en' ? 'text-cyan-400 font-medium' : 'text-slate-300'}`}
+                  >
+                    <span>English</span>
+                    {lang === 'en' && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLanguage('ta');
+                      setShowLanguageDropdown(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-left text-sm ${lang === 'ta' ? 'text-cyan-400 font-medium' : 'text-slate-300'}`}
+                  >
+                    <span>தமிழ் (Tamil)</span>
+                    {lang === 'ta' && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLanguage('hi');
+                      setShowLanguageDropdown(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-left text-sm ${lang === 'hi' ? 'text-cyan-400 font-medium' : 'text-slate-300'}`}
+                  >
+                    <span>हिन्दी (Hindi)</span>
+                    {lang === 'hi' && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* AI Assistant Quick Launch */}
           <Link
             to="/app/assistant"
             className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-blue-500/10 transition-colors text-sm text-slate-400 hover:text-blue-400 border border-transparent hover:border-blue-500/20"
-            title="AI Assistant"
+            title={t('ai_assistant')}
           >
             <Bot size={16} />
-            <span className="hidden lg:inline text-xs font-medium">AI Assistant</span>
+            <span className="hidden lg:inline text-xs font-medium">{t('ai_assistant')}</span>
           </Link>
 
           <div className="relative">
@@ -107,6 +180,7 @@ export default function Navbar() {
               onClick={() => {
                 setShowAlerts(!showAlerts);
                 setShowProfile(false);
+                setShowLanguageDropdown(false);
               }}
               className="relative p-2 rounded-lg hover:bg-white/5 transition-colors"
               id="alerts-bell"
@@ -127,10 +201,10 @@ export default function Navbar() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-96 glass-card-static p-0 overflow-hidden"
+                  className="absolute right-0 mt-2 w-96 glass-card-static p-0 overflow-hidden border border-white/5"
                 >
                   <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">Active Alerts</h3>
+                    <h3 className="text-sm font-semibold text-white">{t('active_alerts')}</h3>
                     <button
                       onClick={() => setShowAlerts(false)}
                       className="p-1 rounded hover:bg-white/5"
@@ -150,7 +224,7 @@ export default function Navbar() {
                             style={{ backgroundColor: getAlertSeverityColor(alert.severity) }}
                           />
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{alert.title}</p>
+                            <p className="text-sm font-medium text-white truncate">{alert.type}</p>
                             <p className="text-xs text-slate-400 mt-1 line-clamp-2">{alert.message}</p>
                             <div className="flex items-center gap-2 mt-1.5">
                               <span
@@ -170,30 +244,36 @@ export default function Navbar() {
                         </div>
                       </div>
                     ))}
+                    {activeAlerts.length === 0 && (
+                      <div className="p-4 text-center text-xs text-slate-500">
+                        {t('no_active_alerts')}
+                      </div>
+                    )}
                   </div>
                   <Link
                     to="/app/alerts"
                     onClick={() => setShowAlerts(false)}
-                    className="block px-4 py-2.5 text-center text-xs text-cyan-400 hover:bg-white/5 transition-colors font-medium"
+                    className="block px-4 py-2.5 text-center text-xs text-cyan-400 hover:bg-white/5 transition-colors font-medium border-t border-white/5"
                   >
-                    View All Alerts →
+                    {t('active_alerts')} →
                   </Link>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* Profile */}
+          {/* Profile Dropdown */}
           <div className="relative">
             <button
               onClick={() => {
                 setShowProfile(!showProfile);
                 setShowAlerts(false);
+                setShowLanguageDropdown(false);
               }}
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
               id="user-profile"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-purple-500/20">
                 {currentUser.name.charAt(0)}
               </div>
               <div className="hidden md:block text-left">
@@ -210,15 +290,21 @@ export default function Navbar() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 8, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  className="absolute right-0 mt-2 w-56 glass-card-static p-1"
+                  className="absolute right-0 mt-2 w-56 glass-card-static p-1 border border-white/5"
                 >
-                  <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left">
+                  <button
+                    onClick={openProfileModal}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left"
+                  >
                     <User size={16} className="text-slate-400" />
-                    <span className="text-sm text-slate-300">Profile</span>
+                    <span className="text-sm text-slate-300">{t('profile')}</span>
                   </button>
-                  <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left">
+                  <button
+                    onClick={openProfileModal}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left"
+                  >
                     <Settings size={16} className="text-slate-400" />
-                    <span className="text-sm text-slate-300">Settings</span>
+                    <span className="text-sm text-slate-300">{t('settings')}</span>
                   </button>
                   <div className="border-t border-white/5 my-1" />
                   <button
@@ -226,7 +312,7 @@ export default function Navbar() {
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition-colors text-left"
                   >
                     <LogOut size={16} className="text-red-400" />
-                    <span className="text-sm text-red-400">Logout</span>
+                    <span className="text-sm text-red-400">{t('logout')}</span>
                   </button>
                 </motion.div>
               )}
@@ -234,6 +320,129 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* Profile & Settings Modal Overlay */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowProfileModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            {/* Modal Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md glass-card-static p-6 shadow-2xl border border-white/10"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Settings size={18} className="text-cyan-400" />
+                  {t('profile')} & {t('settings')}
+                </h3>
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Profile Details */}
+              <div className="space-y-4">
+                {/* User Card */}
+                <div className="flex items-center gap-4 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-purple-500/20">
+                    {currentUser.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">{currentUser.name}</h4>
+                    <p className="text-xs text-slate-400 truncate">{currentUser.email}</p>
+                    <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      {currentUser.role}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Form fields */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Name</label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    className="input-field py-2 text-sm bg-white/5"
+                    placeholder="Enter name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Phone Number</label>
+                  <input
+                    type="text"
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    className="input-field py-2 text-sm bg-white/5"
+                    placeholder="+91-XXXXX XXXXX"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">{t('language')}</label>
+                  <select
+                    value={profileLang}
+                    onChange={(e) => setProfileLang(e.target.value as any)}
+                    className="input-field py-2 text-sm bg-white/5 text-white select-custom cursor-pointer"
+                  >
+                    <option value="en" className="bg-bg-secondary text-white">English</option>
+                    <option value="ta" className="bg-bg-secondary text-white">தமிழ் (Tamil)</option>
+                    <option value="hi" className="bg-bg-secondary text-white">हिन्दी (Hindi)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(false)}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  disabled={isUpdatingProfile}
+                  onClick={async () => {
+                    setIsUpdatingProfile(true);
+                    try {
+                      await updateProfile({
+                        name: profileName,
+                        phone: profilePhone,
+                        languagePref: profileLang,
+                      });
+                      setShowProfileModal(false);
+                    } catch (err) {
+                      console.error("Failed to update profile", err);
+                    } finally {
+                      setIsUpdatingProfile(false);
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 hover:shadow-lg hover:shadow-blue-500/20 text-white transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isUpdatingProfile ? t('verifying') : t('submit')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }

@@ -167,6 +167,51 @@ async def get_current_user_profile(
     return response_data
 
 
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    language_pref: Optional[str] = None
+
+
+@router.put("/me", status_code=200)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update current user's profile info in database."""
+    result = await db.execute(select(User).filter(User.id == current_user["id"]))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if request.name is not None:
+        user.name = request.name
+    if request.phone is not None:
+        user.phone = request.phone
+    if request.language_pref is not None:
+        if request.language_pref not in ["en", "ta", "hi"]:
+            raise HTTPException(status_code=400, detail="Invalid language preference. Must be 'en', 'ta', or 'hi'")
+        user.language_pref = request.language_pref
+
+    await db.commit()
+    await db.refresh(user)
+
+    response_data = {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "phone": user.phone,
+        "language_pref": user.language_pref
+    }
+    if hasattr(user, 'latitude'):
+        response_data["latitude"] = user.latitude
+        response_data["longitude"] = user.longitude
+
+    return response_data
+
+
 @router.post("/refresh")
 async def refresh_token(refresh_token: str):
     """Refresh access token."""

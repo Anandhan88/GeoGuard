@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
 import { mockWeatherData } from '../data/mockData';
+import { useTranslation } from '../utils/translations';
 import {
   getRiskColor,
   getRiskBadgeClass,
@@ -55,7 +56,7 @@ function useAnimatedCounter(target: number, duration = 2000) {
 }
 
 // Risk Gauge Component
-function RiskGauge({ score, size = 120 }: { score: number; size?: number }) {
+function RiskGauge({ score, size = 120, label = 'Risk Score' }: { score: number; size?: number; label?: string }) {
   const radius = (size - 16) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
@@ -78,7 +79,7 @@ function RiskGauge({ score, size = 120 }: { score: number; size?: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-bold text-white">{score}</span>
-        <span className="text-[10px] text-slate-500 uppercase">Risk Score</span>
+        <span className="text-[10px] text-slate-500 uppercase">{label}</span>
       </div>
     </div>
   );
@@ -95,7 +96,9 @@ const rainfallData = [
   { time: '12AM', actual: null, predicted: 65 },
   { time: '3AM', actual: null, predicted: 45 },
 ];
+
 export default function CitizenDashboard() {
+  const { t, lang } = useTranslation();
   const {
     predictions,
     alerts,
@@ -128,10 +131,10 @@ export default function CitizenDashboard() {
   const animatedReports = useAnimatedCounter(stats.citizenReports);
 
   const statCards = [
-    { label: 'Active Alerts', value: animatedAlerts, icon: AlertTriangle, color: '#ef4444', gradient: 'from-red-500/10 to-transparent' },
-    { label: 'Population at Risk', value: formatNumber(animatedPopulation), icon: Users, color: '#f59e0b', gradient: 'from-amber-500/10 to-transparent' },
-    { label: 'Shelters Active', value: animatedShelters, icon: Building, color: '#10b981', gradient: 'from-emerald-500/10 to-transparent' },
-    { label: 'Citizen Reports', value: formatNumber(animatedReports), icon: FileText, color: '#3b82f6', gradient: 'from-blue-500/10 to-transparent' },
+    { label: t('active_alerts'), value: animatedAlerts, icon: AlertTriangle, color: '#ef4444', gradient: 'from-red-500/10 to-transparent' },
+    { label: t('population_at_risk'), value: formatNumber(animatedPopulation), icon: Users, color: '#f59e0b', gradient: 'from-amber-500/10 to-transparent' },
+    { label: t('shelters_active'), value: animatedShelters, icon: Building, color: '#10b981', gradient: 'from-emerald-500/10 to-transparent' },
+    { label: t('reports_filed'), value: formatNumber(animatedReports), icon: FileText, color: '#3b82f6', gradient: 'from-blue-500/10 to-transparent' },
   ];
 
   return (
@@ -139,19 +142,19 @@ export default function CitizenDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-white">{t('overview')}</h1>
           <p className="text-sm text-slate-400 mt-1">
-            Real-time disaster intelligence overview — Chennai Metropolitan Area
+            {t('citizen_portal_sub')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-400 font-medium">Live Updates</span>
+            <span className="text-xs text-emerald-400 font-medium">{t('live_data')}</span>
           </div>
           <span className="text-xs text-slate-500">
             <Clock size={12} className="inline mr-1" />
-            Last updated: Just now
+            {t('system_online')}
           </span>
         </div>
       </div>
@@ -171,7 +174,7 @@ export default function CitizenDashboard() {
             <p className="text-xs text-slate-400 mt-0.5 truncate">{recentAlerts[0].message}</p>
           </div>
           <Link to="/app/alerts" className="btn-secondary text-xs py-1.5 px-3 shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10">
-            View Details
+            {t('view_details')}
           </Link>
         </motion.div>
       )}
@@ -212,17 +215,17 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-white">Rainfall Forecast</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Actual vs Predicted (mm/hr)</p>
+                <h3 className="text-base font-semibold text-white">{t('rainfall_forecast')}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{t('actual_vs_predicted')}</p>
               </div>
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-1 rounded bg-blue-500" />
-                  <span className="text-slate-400">Actual</span>
+                  <span className="text-slate-400">{t('actual')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-1 rounded bg-cyan-500 opacity-50" />
-                  <span className="text-slate-400">Predicted</span>
+                  <span className="text-slate-400">{t('predicted')}</span>
                 </div>
               </div>
             </div>
@@ -259,11 +262,11 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-white">Risk Zones</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Top flood risk areas with AI predictions</p>
+                <h3 className="text-base font-semibold text-white">{t('zones_at_risk')}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{t('command_center_sub')}</p>
               </div>
               <Link to="/app/map" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
-                View on Map <ChevronRight size={14} />
+                {t('view_on_map')} <ChevronRight size={14} />
               </Link>
             </div>
             <div className="space-y-3">
@@ -275,7 +278,7 @@ export default function CitizenDashboard() {
                   transition={{ delay: i * 0.1 }}
                   className="flex items-center gap-4 p-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 cursor-pointer transition-colors group"
                 >
-                  <RiskGauge score={pred.riskScore} size={64} />
+                  <RiskGauge score={pred.riskScore} size={64} label={t('risk_score')} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-semibold text-white truncate">{pred.zoneName}</h4>
@@ -285,13 +288,13 @@ export default function CitizenDashboard() {
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
                       <span className="flex items-center gap-1">
-                        <Droplets size={12} /> {pred.predictedDepth}m depth
+                        <Droplets size={12} /> {pred.predictedDepth}m {t('depth')}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Users size={12} /> {formatNumber(pred.affectedPopulation)} people
+                        <Users size={12} /> {formatNumber(pred.affectedPopulation)} {t('people')}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Clock size={12} /> {pred.predictedDuration}h
+                        <Clock size={12} /> {pred.predictedDuration}{t('hours')}
                       </span>
                     </div>
                     {/* Factor mini-bars */}
@@ -322,7 +325,7 @@ export default function CitizenDashboard() {
         <div className="space-y-6">
           {/* Weather Widget */}
           <div className="glass-card-static p-6">
-            <h3 className="text-base font-semibold text-white mb-4">Current Weather</h3>
+            <h3 className="text-base font-semibold text-white mb-4">{t('current_weather')}</h3>
             <div className="text-center mb-4">
               <span className="text-5xl">{weather.icon}</span>
               <div className="mt-2">
@@ -334,39 +337,39 @@ export default function CitizenDashboard() {
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Droplets size={14} className="text-blue-400" />
                 <div>
-                  <p className="text-xs text-slate-500">Rainfall</p>
+                  <p className="text-xs text-slate-500">{t('rainfall')}</p>
                   <p className="text-sm font-semibold text-white">{weather.rainfall} mm</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Wind size={14} className="text-cyan-400" />
                 <div>
-                  <p className="text-xs text-slate-500">Wind</p>
+                  <p className="text-xs text-slate-500">{t('wind')}</p>
                   <p className="text-sm font-semibold text-white">{weather.windSpeed} km/h</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Thermometer size={14} className="text-amber-400" />
                 <div>
-                  <p className="text-xs text-slate-500">Humidity</p>
+                  <p className="text-xs text-slate-500">{t('humidity')}</p>
                   <p className="text-sm font-semibold text-white">{weather.humidity}%</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Activity size={14} className="text-purple-400" />
                 <div>
-                  <p className="text-xs text-slate-500">Pressure</p>
+                  <p className="text-xs text-slate-500">{t('pressure')}</p>
                   <p className="text-sm font-semibold text-white">{weather.pressure} hPa</p>
                 </div>
               </div>
             </div>
             {/* 5-day forecast */}
             <div className="mt-4 pt-4 border-t border-white/5">
-              <p className="text-xs text-slate-500 mb-2">5-Day Forecast</p>
+              <p className="text-xs text-slate-500 mb-2">{t('forecast_5day')}</p>
               <div className="flex justify-between">
                 {weather.forecast.map((day: any) => (
                   <div key={day.date} className="text-center">
-                    <p className="text-[10px] text-slate-500">{new Date(day.date).toLocaleDateString('en', { weekday: 'short' })}</p>
+                    <p className="text-[10px] text-slate-500">{new Date(day.date).toLocaleDateString(lang, { weekday: 'short' })}</p>
                     <p className="text-lg my-1">{day.icon}</p>
                     <p className="text-xs text-slate-400">{day.rainfall}mm</p>
                   </div>
@@ -378,9 +381,9 @@ export default function CitizenDashboard() {
           {/* Nearby Shelters */}
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">Nearby Shelters</h3>
+              <h3 className="text-base font-semibold text-white">{t('nearby_shelters')}</h3>
               <Link to="/app/shelters" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
-                View All <ChevronRight size={14} />
+                {t('view_all')} <ChevronRight size={14} />
               </Link>
             </div>
             <div className="space-y-3">
@@ -399,7 +402,7 @@ export default function CitizenDashboard() {
                     <div className="mt-2">
                       <div className="flex items-center justify-between text-xs mb-1">
                         <span className="text-slate-400">
-                          {shelter.currentOccupancy}/{shelter.capacity} occupancy
+                          {shelter.currentOccupancy}/{shelter.capacity} {t('occupancy').toLowerCase()}
                         </span>
                         <span style={{ color: occupancyColor }} className="font-semibold">{occupancyPct}%</span>
                       </div>
@@ -426,11 +429,11 @@ export default function CitizenDashboard() {
           {/* Recent Reports */}
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">Recent Reports</h3>
+              <h3 className="text-base font-semibold text-white">{t('recent_reports')}</h3>
               <div className="flex items-center gap-2">
-                <span className="badge badge-info">{reports.length} total</span>
+                <span className="badge badge-info">{reports.length} {t('total')}</span>
                 <Link to="/app/citizen/report" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
-                  + Submit <ChevronRight size={12} />
+                  + {t('submit')} <ChevronRight size={12} />
                 </Link>
               </div>
             </div>
@@ -450,7 +453,7 @@ export default function CitizenDashboard() {
                       <span className="text-[10px] text-slate-500">{formatRelativeTime(report.createdAt)}</span>
                       {report.verified && (
                         <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
-                          <Shield size={8} /> Verified
+                          <Shield size={8} /> {t('verified')}
                         </span>
                       )}
                     </div>

@@ -115,6 +115,27 @@ async def create_alert(
     res = await db.execute(query)
     a = res.scalars().first()
     
+    # Broadcast the new alert in real-time
+    try:
+        from app.main import manager
+        alert_data = {
+            "id": a.id,
+            "type": a.type,
+            "severity": a.severity,
+            "title": a.type,
+            "message": a.message,
+            "targetZone": a.zone.name if a.zone else "Chennai Metropolitan",
+            "issuedAt": a.created_at.isoformat() + "Z" if a.created_at else None,
+            "expiresAt": a.expires_at.isoformat() + "Z" if a.expires_at else None,
+            "isActive": True
+        }
+        await manager.broadcast({
+            "type": "new_alert",
+            "alert": alert_data
+        })
+    except Exception as e:
+        print(f"Failed to broadcast websocket alert: {e}")
+        
     return {
         "status": "created",
         "alert": {
@@ -124,8 +145,8 @@ async def create_alert(
             "title": a.type,
             "message": a.message,
             "targetZone": a.zone.name if a.zone else "Chennai Metropolitan",
-            "issuedAt": a.created_at.isoformat() + "Z",
-            "expiresAt": a.expires_at.isoformat() + "Z",
+            "issuedAt": a.created_at.isoformat() + "Z" if a.created_at else None,
+            "expiresAt": a.expires_at.isoformat() + "Z" if a.expires_at else None,
             "isActive": True
         }
     }

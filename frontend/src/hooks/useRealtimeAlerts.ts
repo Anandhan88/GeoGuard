@@ -29,19 +29,54 @@ export function useRealtimeAlerts() {
             const data = JSON.parse(event.data);
             if (data.type === 'new_alert') {
               const severity = data.alert?.severity || 'moderate';
-              const icon = severity === 'extreme' || severity === 'critical' ? '🔴' :
-                           severity === 'severe' ? '🟠' : '🟡';
-              toast(`${icon} ${data.alert?.title || 'New Alert'}: ${data.alert?.message?.slice(0, 60)}`, {
-                duration: 6000,
+              const icon = severity === 'extreme' || severity === 'critical' ? '🚨' :
+                           severity === 'severe' ? '⚠️' : 'ℹ️';
+              
+              let bgColor = 'rgba(15, 23, 42, 0.95)';
+              let borderColor = 'rgba(148, 163, 184, 0.2)';
+              let textColor = '#f1f5f9';
+              
+              if (severity === 'extreme' || severity === 'critical') {
+                bgColor = 'rgba(239, 68, 68, 0.98)';
+                borderColor = '#fca5a5';
+                textColor = '#ffffff';
+              } else if (severity === 'severe') {
+                bgColor = 'rgba(245, 158, 11, 0.98)';
+                borderColor = '#fde68a';
+                textColor = '#ffffff';
+              } else if (severity === 'moderate') {
+                bgColor = 'rgba(234, 179, 8, 0.98)';
+                borderColor = '#fef08a';
+                textColor = '#ffffff';
+              } else if (severity === 'advisory') {
+                bgColor = 'rgba(59, 130, 246, 0.98)';
+                borderColor = '#bfdbfe';
+                textColor = '#ffffff';
+              }
+
+              toast(`${icon} OFFICIAL BROADCAST: ${data.alert?.title || 'New Alert'}\n${data.alert?.message}`, {
+                duration: 8000,
                 style: {
-                  background: 'rgba(239,68,68,0.1)',
-                  border: '1px solid rgba(239,68,68,0.3)',
-                  color: '#fca5a5',
+                  background: bgColor,
+                  border: `1px solid ${borderColor}`,
+                  color: textColor,
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  whiteSpace: 'pre-line',
+                  borderRadius: '12px',
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
                 },
               });
               fetchAlerts();
             } else if (data.type === 'prediction_update') {
-              toast('📊 Prediction update: AI risk scores recalculated', { duration: 4000 });
+              toast('📊 Prediction update: AI risk scores recalculated', {
+                duration: 4000,
+                style: {
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  border: '1px solid rgba(148, 163, 184, 0.1)',
+                  color: '#f1f5f9',
+                }
+              });
             }
           } catch (err) {
             // Silently ignore parse errors

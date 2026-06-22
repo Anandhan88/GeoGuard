@@ -20,23 +20,24 @@ import {
   FileText,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
+import { useTranslation } from '../../utils/translations';
 
 const navItems = [
-  { label: 'Overview', icon: LayoutDashboard, path: '/app/citizen', section: 'main' },
-  { label: 'Disaster Map', icon: Map, path: '/app/map', section: 'main' },
-  { label: 'Alerts', icon: AlertTriangle, path: '/app/alerts', section: 'main', badge: 7 },
-  { label: 'Submit Report', icon: FileText, path: '/app/citizen/report', section: 'main' },
-  { label: 'Authority View', icon: Shield, path: '/app/authority', section: 'main' },
-  { label: 'Predictions', icon: Activity, path: '/app/citizen', section: 'intelligence' },
-  { label: 'Satellite', icon: Satellite, path: '/app/satellite', section: 'intelligence' },
-  { label: 'Weather', icon: Cloud, path: '/app/weather', section: 'intelligence' },
-  { label: 'Impact Analysis', icon: BarChart3, path: '/app/authority', section: 'intelligence' },
-  { label: 'Evacuation', icon: Navigation, path: '/app/evacuation', section: 'response' },
-  { label: 'Shelters', icon: Building, path: '/app/shelters', section: 'response' },
-  { label: 'Resources', icon: Truck, path: '/app/authority', section: 'response' },
-  { label: 'AI Assistant', icon: MessageSquare, path: '/app/assistant', section: 'tools' },
-  { label: 'Settings', icon: Settings, path: '/app/citizen', section: 'system' },
-  { label: 'Help', icon: HelpCircle, path: '/app/citizen', section: 'system' },
+  { label: 'Overview', translationKey: 'overview', icon: LayoutDashboard, path: '/app/citizen', section: 'main' },
+  { label: 'Disaster Map', translationKey: 'disaster_map', icon: Map, path: '/app/map', section: 'main' },
+  { label: 'Alerts', translationKey: 'active_alerts', icon: AlertTriangle, path: '/app/alerts', section: 'main', badge: 4 },
+  { label: 'Submit Report', translationKey: 'submit_incident_report', icon: FileText, path: '/app/citizen/report', section: 'main', roles: ['citizen', 'volunteer', 'admin'] },
+  { label: 'Authority View', translationKey: 'authority_view', icon: Shield, path: '/app/authority', section: 'main', roles: ['authority', 'admin'] },
+  { label: 'Predictions', translationKey: 'top_predictions', icon: Activity, path: '/app/citizen', section: 'intelligence' },
+  { label: 'Satellite', translationKey: 'satellite_imagery', icon: Satellite, path: '/app/satellite', section: 'intelligence' },
+  { label: 'Weather', translationKey: 'weather_analysis', icon: Cloud, path: '/app/weather', section: 'intelligence' },
+  { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority', section: 'intelligence', roles: ['authority', 'admin'] },
+  { label: 'Evacuation', translationKey: 'evacuation_routes', icon: Navigation, path: '/app/evacuation', section: 'response' },
+  { label: 'Shelters', translationKey: 'shelters_active', icon: Building, path: '/app/shelters', section: 'response' },
+  { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/authority', section: 'response', roles: ['authority', 'admin'] },
+  { label: 'AI Assistant', translationKey: 'ai_assistant', icon: MessageSquare, path: '/app/assistant', section: 'tools' },
+  { label: 'Settings', translationKey: 'settings', icon: Settings, path: '/app/citizen', section: 'system' },
+  { label: 'Help', translationKey: 'help', icon: HelpCircle, path: '/app/citizen', section: 'system' },
 ];
 
 const sections = [
@@ -48,8 +49,10 @@ const sections = [
 ];
 
 export default function Sidebar() {
-  const { sidebarOpen, toggleSidebar } = useAppStore();
+  const { sidebarOpen, toggleSidebar, user } = useAppStore();
   const location = useLocation();
+  const { t } = useTranslation();
+  const role = user?.role || 'citizen';
 
   return (
     <motion.aside
@@ -73,7 +76,9 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
         {sections.map((section) => {
-          const items = navItems.filter((item) => item.section === section.key);
+          const items = navItems
+            .filter((item) => item.section === section.key)
+            .filter((item) => !item.roles || item.roles.includes(role));
           if (items.length === 0) return null;
 
           return (
@@ -84,19 +89,23 @@ export default function Sidebar() {
                 </p>
               )}
               {items.map((item) => {
-                const isActive = location.pathname === item.path;
+                const resolvedPath = ['Overview', 'Predictions', 'Settings', 'Help'].includes(item.label)
+                  ? (role === 'authority' ? '/app/authority' : '/app/citizen')
+                  : item.path;
+                const isActive = location.pathname === resolvedPath;
                 const Icon = item.icon;
+                const displayLabel = t(item.translationKey as any) || item.label;
 
                 return (
                   <NavLink
                     key={item.label}
-                    to={item.path}
+                    to={resolvedPath}
                     className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 transition-all duration-200 relative ${
                       isActive
                         ? 'bg-blue-500/10 text-blue-400'
                         : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                     }`}
-                    title={!sidebarOpen ? item.label : undefined}
+                    title={!sidebarOpen ? displayLabel : undefined}
                   >
                     {isActive && (
                       <motion.div
@@ -112,7 +121,7 @@ export default function Sidebar() {
                       }`}
                     />
                     {sidebarOpen && (
-                      <span className="text-sm font-medium truncate">{item.label}</span>
+                      <span className="text-sm font-medium truncate">{displayLabel}</span>
                     )}
                     {sidebarOpen && item.badge && (
                       <span className="ml-auto bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
@@ -132,11 +141,11 @@ export default function Sidebar() {
         <div className="p-4 border-t border-white/5">
           <div className="flex items-center gap-2 px-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-slate-500">System Online</span>
+            <span className="text-xs text-slate-500">{t('system_online')}</span>
           </div>
           <div className="flex items-center gap-2 px-2 mt-1.5">
             <Radio size={12} className="text-cyan-400 animate-pulse" />
-            <span className="text-xs text-slate-500">Live Data Active</span>
+            <span className="text-xs text-slate-500">{t('live_data')}</span>
           </div>
         </div>
       )}

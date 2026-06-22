@@ -11,11 +11,14 @@ interface AppState {
   // Auth
   user: User | null;
   isAuthenticated: boolean;
+  currentLanguage: 'en' | 'ta' | 'hi';
   login: (user: User) => void;
   logout: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, role: string) => Promise<void>;
   loadCurrentUser: () => Promise<void>;
+  setLanguage: (lang: 'en' | 'ta' | 'hi') => Promise<void>;
+  updateProfile: (profileData: { name?: string; phone?: string; languagePref?: 'en' | 'ta' | 'hi' }) => Promise<void>;
 
   // Sidebar
   sidebarOpen: boolean;
@@ -78,11 +81,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Auth
   user: null,
   isAuthenticated: false,
+  currentLanguage: 'en',
   login: (user) => set({ user, isAuthenticated: true }),
   logout: () => {
     localStorage.removeItem('geoguard_access_token');
     localStorage.removeItem('geoguard_refresh_token');
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, currentLanguage: 'en' });
   },
 
   signIn: async (email, password) => {
@@ -98,10 +102,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         email: user.email,
         name: user.name,
         role: user.role as any,
-        languagePref: 'en',
+        languagePref: user.language_pref || 'en',
+        phone: user.phone,
       };
       
-      set({ user: mappedUser, isAuthenticated: true, isLoading: false });
+      set({ user: mappedUser, isAuthenticated: true, currentLanguage: mappedUser.languagePref, isLoading: false });
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Failed to sign in';
       set({ error: errMsg, isLoading: false });
@@ -122,10 +127,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         email: user.email,
         name: user.name,
         role: user.role as any,
-        languagePref: 'en',
+        languagePref: user.language_pref || 'en',
+        phone: user.phone,
       };
       
-      set({ user: mappedUser, isAuthenticated: true, isLoading: false });
+      set({ user: mappedUser, isAuthenticated: true, currentLanguage: mappedUser.languagePref, isLoading: false });
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Failed to register';
       set({ error: errMsg, isLoading: false });
@@ -145,11 +151,58 @@ export const useAppStore = create<AppState>((set, get) => ({
         name: user.name,
         role: user.role as any,
         languagePref: user.language_pref || 'en',
+        phone: user.phone,
       };
-      set({ user: mappedUser, isAuthenticated: true });
+      set({ user: mappedUser, isAuthenticated: true, currentLanguage: mappedUser.languagePref });
     } catch (err) {
       // Clear token if invalid
       localStorage.removeItem('geoguard_access_token');
+    }
+  },
+
+  setLanguage: async (lang) => {
+    set({ currentLanguage: lang });
+    const { user, isAuthenticated } = get();
+    if (isAuthenticated && user) {
+      try {
+        const res = await api.put('/auth/me', { language_pref: lang });
+        const updatedUser = { ...user, languagePref: res.data.language_pref as any };
+        set({ user: updatedUser });
+      } catch (err) {
+        console.error("Failed to sync language preference to backend", err);
+      }
+    }
+  },
+
+  updateProfile: async (profileData) => {
+    set({ isLoading: true, error: null });
+    const { user } = get();
+    if (!user) return;
+    try {
+      const payload: any = {};
+      if (profileData.name !== undefined) payload.name = profileData.name;
+      if (profileData.phone !== undefined) payload.phone = profileData.phone;
+      if (profileData.languagePref !== undefined) payload.language_pref = profileData.languagePref;
+      
+      const res = await api.put('/auth/me', payload);
+      const updated = res.data;
+      const mappedUser: User = {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        role: updated.role as any,
+        languagePref: updated.language_pref || 'en',
+        phone: updated.phone,
+      };
+      set({ 
+        user: mappedUser, 
+        currentLanguage: mappedUser.languagePref,
+        isLoading: false 
+      });
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || 'Failed to update profile';
+      set({ error: errMsg, isLoading: false });
+      throw new Error(errMsg);
     }
   },
 

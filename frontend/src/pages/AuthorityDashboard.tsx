@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate, Navigate } from 'react-router-dom';
 import {
   AlertTriangle, Users, Truck, Activity, Shield, MapPin, 
   ArrowUpRight, Target, DollarSign,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
+import { useTranslation } from '../utils/translations';
 import {
   getRiskBadgeClass, formatNumber, formatCurrency,
 } from '../utils/helpers';
@@ -17,6 +19,9 @@ import {
 const PIE_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899'];
 
 export default function AuthorityDashboard() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const user = useAppStore((s) => s.user);
   const {
     predictions,
     reports,
@@ -33,6 +38,10 @@ export default function AuthorityDashboard() {
     fetchReports();
     fetchStats();
   }, []);
+
+  if (user && user.role !== 'authority' && user.role !== 'admin') {
+    return <Navigate to="/app/citizen" replace />;
+  }
 
   // Dynamic calculations based on state
   const resourceChartData = predictions.map((p) => {
@@ -126,10 +135,10 @@ export default function AuthorityDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Shield size={24} className="text-cyan-400" />
-            Authority Command Center
+            {t('command_center')}
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Comprehensive disaster intelligence — Decision support for emergency management
+            {t('command_center_sub')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -138,10 +147,13 @@ export default function AuthorityDashboard() {
             className="btn-primary text-xs py-2"
             disabled={isLoading}
           >
-            <Target size={14} /> {isLoading ? 'Running Simulation...' : 'Generate Predictions'}
+            <Target size={14} /> {isLoading ? t('verifying') : t('run_predictions')}
           </button>
-          <button className="btn-danger text-xs py-2">
-            <AlertTriangle size={14} /> Issue Alert
+          <button 
+            onClick={() => navigate('/app/alerts?create=true')}
+            className="btn-danger text-xs py-2"
+          >
+            <AlertTriangle size={14} /> {t('issue_alert')}
           </button>
         </div>
       </div>
@@ -149,12 +161,12 @@ export default function AuthorityDashboard() {
       {/* Quick Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {[
-          { label: 'Risk Score (Avg)', value: `${stats.avgRiskScore}%`, color: '#f59e0b', icon: Activity },
-          { label: 'Zones at Risk', value: stats.zonesAtRisk.toString(), color: '#ef4444', icon: AlertTriangle },
-          { label: 'Pop. Affected', value: formatNumber(stats.populationAffected), color: '#3b82f6', icon: Users },
-          { label: 'Resources Deployed', value: stats.resourcesDeployed.toString(), color: '#10b981', icon: Truck },
-          { label: 'Est. Loss', value: `₹${(stats.populationAffected / 12 * 1.25 / 100).toFixed(1)} Cr`, color: '#8b5cf6', icon: DollarSign },
-          { label: 'Reports Today', value: stats.citizenReports.toString(), color: '#06b6d4', icon: MapPin },
+          { label: t('risk_score'), value: `${stats.avgRiskScore}%`, color: '#f59e0b', icon: Activity },
+          { label: t('zones_at_risk'), value: stats.zonesAtRisk.toString(), color: '#ef4444', icon: AlertTriangle },
+          { label: t('affected_population'), value: formatNumber(stats.populationAffected), color: '#3b82f6', icon: Users },
+          { label: t('resources'), value: stats.resourcesDeployed.toString(), color: '#10b981', icon: Truck },
+          { label: t('impact_assessment'), value: `₹${(stats.populationAffected / 12 * 1.25 / 100).toFixed(1)} Cr`, color: '#8b5cf6', icon: DollarSign },
+          { label: t('citizen_reports'), value: stats.citizenReports.toString(), color: '#06b6d4', icon: MapPin },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -174,7 +186,7 @@ export default function AuthorityDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Impact Assessment Radar */}
         <div className="glass-card-static p-6">
-          <h3 className="text-base font-semibold text-white mb-1">Impact Assessment</h3>
+          <h3 className="text-base font-semibold text-white mb-1">{t('impact_assessment')}</h3>
           <p className="text-xs text-slate-500 mb-4">Adyar River Basin — Multi-dimensional analysis</p>
           <ResponsiveContainer width="100%" height={250}>
             <RadarChart data={impactRadarData}>
@@ -195,7 +207,7 @@ export default function AuthorityDashboard() {
 
         {/* Resource Allocation Chart */}
         <div className="glass-card-static p-6">
-          <h3 className="text-base font-semibold text-white mb-1">Resource Allocation</h3>
+          <h3 className="text-base font-semibold text-white mb-1">{t('resources')}</h3>
           <p className="text-xs text-slate-500 mb-4">Deployed resources per zone</p>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={resourceChartData}>
@@ -232,7 +244,7 @@ export default function AuthorityDashboard() {
 
         {/* Report Types Pie */}
         <div className="glass-card-static p-6">
-          <h3 className="text-base font-semibold text-white mb-1">Report Distribution</h3>
+          <h3 className="text-base font-semibold text-white mb-1">{t('citizen_reports')}</h3>
           <p className="text-xs text-slate-500 mb-4">Citizen reports by category</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
@@ -273,18 +285,18 @@ export default function AuthorityDashboard() {
       <div className="glass-card-static p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-white">Zone Impact Analysis</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Comprehensive impact assessment across affected zones</p>
+            <h3 className="text-base font-semibold text-white">{t('zone_impact_analysis')}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{t('impact_assessment')}</p>
           </div>
           <button className="btn-secondary text-xs py-1.5">
-            Export Report <ArrowUpRight size={12} />
+            {t('export_report')} <ArrowUpRight size={12} />
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5">
-                {['Zone', 'Risk', 'Population', 'Buildings', 'Schools', 'Hospitals', 'Agri (Ha)', 'Est. Loss', 'Impact Score'].map((h) => (
+                {[t('zone_name'), t('risk_level'), t('affected_population'), 'Buildings', 'Schools', 'Hospitals', 'Agri (Ha)', 'Est. Loss', t('risk_score')].map((h) => (
                   <th key={h} className="text-left py-3 px-3 text-xs text-slate-500 font-medium uppercase tracking-wider">
                     {h}
                   </th>
@@ -340,11 +352,11 @@ export default function AuthorityDashboard() {
       <div className="glass-card-static p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-white">Resource Deployment Plan</h3>
-            <p className="text-xs text-slate-500 mt-0.5">AI-recommended resource allocation per zone</p>
+            <h3 className="text-base font-semibold text-white">{t('resource_deployment_plan')}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{t('command_center_sub')}</p>
           </div>
           <button className="btn-primary text-xs py-1.5">
-            <Target size={12} /> Optimize Allocation
+            <Target size={12} /> {t('optimize_allocation')}
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -379,7 +391,7 @@ export default function AuthorityDashboard() {
                 ))}
               </div>
               <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                <span className="text-xs text-slate-500">Total Personnel</span>
+                <span className="text-xs text-slate-500">{t('total_personnel')}</span>
                 <span className="text-sm font-bold text-cyan-400">{alloc.totalPersonnel}</span>
               </div>
             </motion.div>

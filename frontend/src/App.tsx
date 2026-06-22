@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -14,7 +14,31 @@ import AIAssistantPage from './pages/AIAssistantPage';
 import EvacuationPage from './pages/EvacuationPage';
 import SatellitePage from './pages/SatellitePage';
 import WeatherPage from './pages/WeatherPage';
+import { useAppStore } from './stores/useAppStore';
 import './index.css';
+
+function DashboardIndex() {
+  const user = useAppStore((s) => s.user);
+  const isLoading = useAppStore((s) => s.isLoading);
+
+  if (isLoading || (!user && localStorage.getItem('geoguard_access_token'))) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role === 'authority') {
+    return <Navigate to="/app/authority" replace />;
+  }
+
+  return <Navigate to="/app/citizen" replace />;
+}
 
 function App() {
   return (
@@ -35,7 +59,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app" element={<DashboardLayout />}>
-          <Route index element={<CitizenDashboard />} />
+          <Route index element={<DashboardIndex />} />
           <Route path="citizen" element={<CitizenDashboard />} />
           <Route path="citizen/report" element={<ReportPage />} />
           <Route path="authority" element={<AuthorityDashboard />} />
