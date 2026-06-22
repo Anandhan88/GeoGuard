@@ -302,19 +302,60 @@ async def get_historical(
     return {"history": history, "hours": hours}
 
 
+async def fetch_stations_openmeteo(lats: list, lngs: list):
+    """Fetch live coordinate weather from Open-Meteo for all stations."""
+    lats_str = ",".join(map(str, lats))
+    lngs_str = ",".join(map(str, lngs))
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lats_str}&longitude={lngs_str}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, timeout=5.0)
+        if response.status_code == 200:
+            return response.json()
+    raise Exception("Failed to fetch weather stations")
+
+
 @router.get("/stations")
 async def get_weather_stations():
     """Get weather station data across Chennai."""
     stations = [
-        {"id": "ws-001", "name": "Chennai Airport (Meenambakkam)", "lat": 12.9941, "lng": 80.1709, "rainfall": 52.4, "windSpeed": 38},
-        {"id": "ws-002", "name": "Nungambakkam", "lat": 13.0604, "lng": 80.2496, "rainfall": 48.1, "windSpeed": 29},
-        {"id": "ws-003", "name": "Adyar", "lat": 13.0067, "lng": 80.2206, "rainfall": 61.3, "windSpeed": 35},
-        {"id": "ws-004", "name": "Velachery", "lat": 12.9815, "lng": 80.2180, "rainfall": 71.8, "windSpeed": 31},
-        {"id": "ws-005", "name": "Tambaram", "lat": 12.9249, "lng": 80.1000, "rainfall": 39.2, "windSpeed": 26},
+        {"id": "ws-001", "name": "Chennai Airport (Meenambakkam)", "lat": 12.9941, "lng": 80.1709},
+        {"id": "ws-002", "name": "Nungambakkam", "lat": 13.0604, "lng": 80.2496},
+        {"id": "ws-003", "name": "Adyar", "lat": 13.0067, "lng": 80.2206},
+        {"id": "ws-004", "name": "Velachery", "lat": 12.9815, "lng": 80.2180},
+        {"id": "ws-005", "name": "Tambaram", "lat": 12.9249, "lng": 80.1000},
     ]
-    for s in stations:
-        s["rainfall"] = round(s["rainfall"] + random.uniform(-5, 8), 1)
-        s["humidity"] = random.randint(80, 93)
-        s["temperature"] = round(28 + random.uniform(-1.5, 2), 1)
-        s["condition"] = "Heavy Rain"
+    
+    lats = [s["lat"] for s in stations]
+    lngs = [s["lng"] for s in stations]
+    
+    try:
+        data_list = await fetch_stations_openmeteo(lats, lngs)
+        if not isinstance(data_list, list):
+            data_list = [data_list]
+            
+        for i, s in enumerate(stations):
+            if i < len(data_list):
+                current = data_list[i].get("current", {})
+                wmo_code = current.get("weather_code", 0)
+                cond, _ = map_wmo_code(wmo_code)
+                s["rainfall"] = round(current.get("precipitation", 0.0), 1)
+                s["windSpeed"] = round(current.get("wind_speed_10m", 0.0))
+                s["temperature"] = round(current.get("temperature_2m", 28.0), 1)
+                s["humidity"] = current.get("relative_humidity_2m", 80)
+                s["condition"] = cond
+            else:
+                s["rainfall"] = round(45.0 + random.uniform(-10, 10), 1)
+                s["windSpeed"] = random.randint(20, 40)
+                s["temperature"] = round(28.0 + random.uniform(-1.5, 2.0), 1)
+                s["humidity"] = random.randint(80, 93)
+                s["condition"] = "Heavy Rain"
+    except Exception as e:
+        print(f"Error fetching stations from Open-Meteo: {e}. Falling back to simulation.")
+        for s in stations:
+            s["rainfall"] = round(45.0 + random.uniform(-10, 10), 1)
+            s["windSpeed"] = random.randint(20, 40)
+            s["temperature"] = round(28.0 + random.uniform(-1.5, 2.0), 1)
+            s["humidity"] = random.randint(80, 93)
+            s["condition"] = "Heavy Rain"
+            
     return {"stations": stations, "total": len(stations)}
