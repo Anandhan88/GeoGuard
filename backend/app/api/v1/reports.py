@@ -1,16 +1,20 @@
 """
 GeoGuard AI - Citizen Reports API
 """
-from fastapi import APIRouter, Query, Form, Depends, HTTPException
+from fastapi import APIRouter, Query, Form, Depends, HTTPException, File, UploadFile
 from typing import Optional
 from datetime import datetime
+import os
+import uuid
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.models import CitizenReport, User
 from app.core.security import get_current_user
+from app.ml.vision.classifier import DisasterCVClassifier
 
 router = APIRouter()
 
@@ -66,15 +70,50 @@ async def create_report(
     severity: int = Form(...),
     lat: float = Form(...),
     lng: float = Form(...),
+    image: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Submit a citizen report."""
+    """Submit a citizen report with optional CV image classification."""
+    image_url = None
+    cv_metadata = None
+    
+    if image is not None:
+        try:
+            # Generate local filename
+            file_ext = image.filename.split(".")[-1] if "." in image.filename else "jpg"
+            file_name = f"{uuid.uuid4()}.{file_ext}"
+            file_path = os.path.join(settings.UPLOAD_DIR, file_name)
+            
+            # Write file to disk
+            with open(file_path, "wb") as buffer:
+                buffer.write(await image.read())
+                
+            # Classify using YOLOv8 ONNX / Fallback
+            classifier = DisasterCVClassifier()
+            cv_type, cv_severity, conf = classifier.classify_image(file_path, description)
+            
+            # Override database values using computer vision detection
+            # Map "road blockage" -> "blocked_road", "fallen trees" -> "blocked_road" or "other", etc.
+            type_mapping = {
+                "flood": "flood",
+                "fire": "fire",
+                "road blockage": "blocked_road",
+                "fallen trees": "blocked_road",
+            }
+            report_type = type_mapping.get(cv_type, "other")
+            severity = cv_severity
+            image_url = f"/uploads/{file_name}"
+            cv_metadata = f"Classified by YOLOv8: {cv_type} (conf: {conf:.2f})"
+        except Exception as e:
+            print(f"Error handling report file upload: {e}")
+
     new_report = CitizenReport(
         user_id=current_user["id"],
         type=report_type,
-        description=description,
+        description=description + (f"\n\n[{cv_metadata}]" if cv_metadata else ""),
         severity=severity,
+        image_url=image_url,
         verified=False,
         created_at=datetime.utcnow()
     )
@@ -104,9 +143,10 @@ async def create_report(
             "type": r.type,
             "description": r.description,
             "severity": r.severity,
+            "imageUrl": r.image_url or "/demo/flood-1.jpg",
             "verified": r.verified,
             "location": {"lat": r_lat, "lng": r_lng},
-            "address": f"Chennai ({r_lat:.3f}, {r_lng:.3f})",
+            "address": f"Tamil Nadu ({r_lat:.3f}, {r_lng:.3f})",
             "createdAt": r.created_at.isoformat() + "Z",
             "upvotes": 0
         }

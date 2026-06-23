@@ -53,6 +53,8 @@ pnpm-debug.log*
 lerna-debug.log*
 *.sqlite
 *.db
+*.db-shm
+*.db-wal
 
 # IDEs and Editors
 .vscode/

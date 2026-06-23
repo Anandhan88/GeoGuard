@@ -7,12 +7,16 @@ from typing import Optional
 from datetime import datetime, timedelta, timezone
 import random
 import httpx
+import json
+import time
+import redis.asyncio as redis
+from app.core.config import settings
 
 router = APIRouter()
 
-# Chennai coordinates
-LAT = 13.0827
-LNG = 80.2707
+# Trichy (Central Tamil Nadu) coordinates
+LAT = 10.7905
+LNG = 78.7047
 
 # Base weather conditions for Chennai during monsoon (Fallback)
 BASE_WEATHER = {
@@ -29,6 +33,74 @@ BASE_WEATHER = {
     "dewPoint": 26,
     "feelsLike": 37,
 }
+
+
+# Global HTTP client to reuse connections
+_http_client: Optional[httpx.AsyncClient] = None
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=5.0)
+    return _http_client
+
+
+# Global Redis client with failover
+_redis_client: Optional[redis.Redis] = None
+_redis_available = True
+
+def get_redis_client() -> Optional[redis.Redis]:
+    global _redis_client, _redis_available
+    if not _redis_available:
+        return None
+    if _redis_client is None:
+        try:
+            _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        except Exception as e:
+            print(f"Redis initialization failed: {e}. Weather cache falling back to in-memory.")
+            _redis_available = False
+            return None
+    return _redis_client
+
+
+# In-memory fallback cache
+_in_memory_cache = {}
+
+class WeatherCache:
+    @staticmethod
+    async def get(key: str) -> Optional[dict]:
+        global _redis_available
+        if _redis_available:
+            client = get_redis_client()
+            if client:
+                try:
+                    val = await client.get(key)
+                    if val:
+                        return json.loads(val)
+                except Exception as e:
+                    print(f"Redis cache GET failed: {e}. Falling back to in-memory.")
+        
+        if key in _in_memory_cache:
+            val, expiry = _in_memory_cache[key]
+            if expiry > time.time():
+                return val
+            else:
+                del _in_memory_cache[key]
+        return None
+
+    @staticmethod
+    async def set(key: str, value: dict, expire_seconds: int = 600):
+        global _redis_available
+        if _redis_available:
+            client = get_redis_client()
+            if client:
+                try:
+                    await client.set(key, json.dumps(value), ex=expire_seconds)
+                    return
+                except Exception as e:
+                    print(f"Redis cache SET failed: {e}.")
+        
+        _in_memory_cache[key] = (value, time.time() + expire_seconds)
 
 
 def map_wmo_code(code: int):
@@ -120,22 +192,59 @@ def get_hourly_forecast(base_date: datetime = None):
     return hourly
 
 
-async def fetch_live_openmeteo():
-    """Fetch live data from Open-Meteo API."""
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={LAT}&longitude={LNG}&current=temperature_2m,relative_humidity_2m,precipitation,rain,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m&hourly=precipitation,temperature_2m,relative_humidity_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=5.0)
+async def fetch_live_openmeteo(lat: float, lng: float):
+    """Fetch live data from Open-Meteo API for given coordinates."""
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,relative_humidity_2m,precipitation,rain,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m&hourly=precipitation,temperature_2m,relative_humidity_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto"
+    client = get_http_client()
+    response = await client.get(url)
+    if response.status_code == 200:
+        return response.json()
+    raise Exception(f"Unsuccessful weather API request: status {response.status_code}")
+
+
+@router.get("/search")
+async def search_location(query: str = Query(..., min_length=2)):
+    """Search for any location using OpenStreetMap Nominatim geocoding API."""
+    client = get_http_client()
+    headers = {"User-Agent": "GeoGuardAI/1.0"}
+    url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=5&countrycodes=in"
+    try:
+        response = await client.get(url, headers=headers)
         if response.status_code == 200:
-            return response.json()
-    raise Exception("Unsuccessful weather API request")
+            results = response.json()
+            return [
+                {
+                    "name": r.get("display_name"),
+                    "lat": float(r.get("lat")),
+                    "lng": float(r.get("lon")),
+                    "class": r.get("class"),
+                    "type": r.get("type"),
+                }
+                for r in results
+            ]
+        return []
+    except Exception as e:
+        print(f"Error calling Nominatim geocoder: {e}")
+        return []
 
 
 @router.get("/current")
-async def get_current_weather():
-    """Get current weather conditions for Chennai."""
+async def get_current_weather(
+    lat: Optional[float] = Query(None, description="Latitude"),
+    lng: Optional[float] = Query(None, description="Longitude")
+):
+    """Get current weather conditions for specified location (defaults to Trichy)."""
+    current_lat = lat if lat is not None else LAT
+    current_lng = lng if lng is not None else LNG
+
+    cache_key = f"weather:current:{current_lat:.4f}:{current_lng:.4f}"
+    cached = await WeatherCache.get(cache_key)
+    if cached:
+        return cached
+
     now = datetime.utcnow()
     try:
-        data = await fetch_live_openmeteo()
+        data = await fetch_live_openmeteo(current_lat, current_lng)
         current = data.get("current", {})
         hourly = data.get("hourly", {})
         daily = data.get("daily", {})
@@ -202,7 +311,7 @@ async def get_current_weather():
         if not forecast:
             forecast = get_forecast_days(now)
             
-        return {
+        result = {
             "temperature": round(temp) if temp is not None else 29,
             "humidity": humidity if humidity is not None else 85,
             "rainfall": round(precip, 1) if precip is not None else 0.0,
@@ -222,10 +331,12 @@ async def get_current_weather():
             "imdWarning": "Heavy Rainfall Warning from Open-Meteo." if precip > 10.0 else "",
             "source": "Open-Meteo Real-Time API"
         }
+        await WeatherCache.set(cache_key, result, expire_seconds=600)
+        return result
     except Exception as e:
         # Fallback to simulated data on failure
         print(f"Error fetching live weather: {e}. Falling back to simulation.")
-        return {
+        result = {
             **BASE_WEATHER,
             "temperature": BASE_WEATHER["temperature"] + round(random.uniform(-1, 1), 1),
             "humidity": BASE_WEATHER["humidity"] + random.randint(-3, 3),
@@ -236,16 +347,30 @@ async def get_current_weather():
             "forecast": get_forecast_days(now),
             "hourlyForecast": get_hourly_forecast(now),
             "extremeWeatherWarning": True,
-            "imdWarning": "Very Heavy Rainfall Warning: IMD predicts 150-200mm rainfall in next 24 hours for Chennai district.",
+            "imdWarning": "Very Heavy Rainfall Warning: IMD predicts 150-200mm rainfall in next 24 hours.",
             "source": "IMD Simulated (Fallback)"
         }
+        await WeatherCache.set(cache_key, result, expire_seconds=60)
+        return result
 
 
 @router.get("/forecast")
-async def get_forecast(days: int = Query(5, le=10)):
-    """Get weather forecast."""
+async def get_forecast(
+    days: int = Query(5, le=10),
+    lat: Optional[float] = Query(None, description="Latitude"),
+    lng: Optional[float] = Query(None, description="Longitude")
+):
+    """Get weather forecast for specified location."""
+    current_lat = lat if lat is not None else LAT
+    current_lng = lng if lng is not None else LNG
+
+    cache_key = f"weather:forecast:{days}:{current_lat:.4f}:{current_lng:.4f}"
+    cached = await WeatherCache.get(cache_key)
+    if cached:
+        return cached
+
     try:
-        data = await fetch_live_openmeteo()
+        data = await fetch_live_openmeteo(current_lat, current_lng)
         daily = data.get("daily", {})
         daily_times = daily.get("time", [])
         daily_codes = daily.get("weather_code", [])
@@ -265,20 +390,24 @@ async def get_forecast(days: int = Query(5, le=10)):
                 "condition": d_cond,
                 "icon": d_icon
             })
-        return {
+        result = {
             "forecast": forecast,
             "source": "Open-Meteo Real-Time API",
-            "location": "Chennai Metropolitan Area",
+            "location": f"({current_lat:.4f}, {current_lng:.4f})",
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
+        await WeatherCache.set(cache_key, result, expire_seconds=900)
+        return result
     except Exception as e:
         print(f"Error fetching forecast: {e}")
-        return {
+        result = {
             "forecast": get_forecast_days()[:days],
             "source": "IMD Simulated (Fallback)",
-            "location": "Chennai Metropolitan Area",
+            "location": f"({current_lat:.4f}, {current_lng:.4f})",
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
+        await WeatherCache.set(cache_key, result, expire_seconds=120)
+        return result
 
 
 @router.get("/historical")
@@ -307,27 +436,34 @@ async def fetch_stations_openmeteo(lats: list, lngs: list):
     lats_str = ",".join(map(str, lats))
     lngs_str = ",".join(map(str, lngs))
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lats_str}&longitude={lngs_str}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, timeout=5.0)
-        if response.status_code == 200:
-            return response.json()
+    client = get_http_client()
+    response = await client.get(url)
+    if response.status_code == 200:
+        return response.json()
     raise Exception("Failed to fetch weather stations")
 
 
 @router.get("/stations")
 async def get_weather_stations():
-    """Get weather station data across Chennai."""
+    """Get weather station data across Tamil Nadu."""
+    cache_key = "weather:stations"
+    cached = await WeatherCache.get(cache_key)
+    if cached:
+        return cached
+
     stations = [
-        {"id": "ws-001", "name": "Chennai Airport (Meenambakkam)", "lat": 12.9941, "lng": 80.1709},
-        {"id": "ws-002", "name": "Nungambakkam", "lat": 13.0604, "lng": 80.2496},
-        {"id": "ws-003", "name": "Adyar", "lat": 13.0067, "lng": 80.2206},
-        {"id": "ws-004", "name": "Velachery", "lat": 12.9815, "lng": 80.2180},
-        {"id": "ws-005", "name": "Tambaram", "lat": 12.9249, "lng": 80.1000},
+        {"id": "ws-001", "name": "Chennai", "lat": 13.0827, "lng": 80.2707},
+        {"id": "ws-002", "name": "Coimbatore", "lat": 11.0168, "lng": 76.9558},
+        {"id": "ws-003", "name": "Madurai", "lat": 9.9252, "lng": 78.1198},
+        {"id": "ws-004", "name": "Tiruchirappalli", "lat": 10.7905, "lng": 78.7047},
+        {"id": "ws-005", "name": "Salem", "lat": 11.6643, "lng": 78.1460},
+        {"id": "ws-006", "name": "Tirunelveli", "lat": 8.7139, "lng": 77.7567},
     ]
     
     lats = [s["lat"] for s in stations]
     lngs = [s["lng"] for s in stations]
     
+    is_fallback = False
     try:
         data_list = await fetch_stations_openmeteo(lats, lngs)
         if not isinstance(data_list, list):
@@ -351,6 +487,7 @@ async def get_weather_stations():
                 s["condition"] = "Heavy Rain"
     except Exception as e:
         print(f"Error fetching stations from Open-Meteo: {e}. Falling back to simulation.")
+        is_fallback = True
         for s in stations:
             s["rainfall"] = round(45.0 + random.uniform(-10, 10), 1)
             s["windSpeed"] = random.randint(20, 40)
@@ -358,4 +495,7 @@ async def get_weather_stations():
             s["humidity"] = random.randint(80, 93)
             s["condition"] = "Heavy Rain"
             
-    return {"stations": stations, "total": len(stations)}
+    result = {"stations": stations, "total": len(stations)}
+    expire_seconds = 120 if is_fallback else 600
+    await WeatherCache.set(cache_key, result, expire_seconds=expire_seconds)
+    return result

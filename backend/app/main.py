@@ -9,7 +9,7 @@ import json
 import os
 
 from app.core.config import settings
-from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact, weather
+from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact, weather, chat
 from app.core.database import init_db
 
 
@@ -60,10 +60,18 @@ async def lifespan(app: FastAPI):
     # Create upload directory
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     
+    # Start weather background updater
+    import asyncio
+    from app.tasks.weather_updater import start_weather_updater
+    from app.core.database import async_session_maker
+    app.state.weather_task = asyncio.create_task(start_weather_updater(async_session_maker))
+    
     yield
     
     # Shutdown
     print(f"Shutting down {settings.APP_NAME}")
+    if hasattr(app.state, "weather_task"):
+        app.state.weather_task.cancel()
 
 
 # Create FastAPI app
@@ -85,6 +93,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Static Files Mount for Image Uploads
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
 # API Routes
 app.include_router(auth.router, prefix=f"{settings.API_PREFIX}/auth", tags=["Authentication"])
 app.include_router(predictions.router, prefix=f"{settings.API_PREFIX}/predictions", tags=["Predictions"])
@@ -94,6 +105,7 @@ app.include_router(shelters.router, prefix=f"{settings.API_PREFIX}/shelters", ta
 app.include_router(evacuation.router, prefix=f"{settings.API_PREFIX}/evacuation", tags=["Evacuation"])
 app.include_router(impact.router, prefix=f"{settings.API_PREFIX}/impact", tags=["Impact Assessment"])
 app.include_router(weather.router, prefix=f"{settings.API_PREFIX}/weather", tags=["Weather"])
+app.include_router(chat.router, prefix=f"{settings.API_PREFIX}/chat", tags=["AI Chatbot"])
 
 
 # WebSocket endpoint for real-time alerts

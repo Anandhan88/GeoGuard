@@ -86,11 +86,49 @@ async def list_impact_assessments(db: AsyncSession = Depends(get_db)):
 @router.get("/{zone_id}")
 async def get_impact_assessment(zone_id: str, db: AsyncSession = Depends(get_db)):
     """Get detailed impact assessment for a zone."""
-    assessments = await get_live_impact_assessments(db)
-    assessment = next((a for a in assessments if a["zone_id"] == zone_id), None)
-    if not assessment:
+    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone)).filter(FloodPrediction.zone_id == zone_id)
+    result = await db.execute(query)
+    pred = result.scalars().first()
+    if not pred:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    return assessment
+        
+    zone = pred.zone
+    risk_factor = pred.risk_score / 100.0
+    pop_affected = int(zone.population * risk_factor)
+    buildings = int(pop_affected / 12) if pop_affected > 0 else 0
+    schools = max(0, int(buildings / 250))
+    hospitals = max(0, int(buildings / 1200))
+    agri = int(pred.predicted_depth * 45)
+    loss = int(buildings * 1.25)
+    human_risk = int(zone.vulnerability_score * 0.3 + pred.risk_score * 0.7)
+    
+    return {
+        "zoneId": zone.id,
+        "zone_id": zone.id,
+        "zoneName": zone.name,
+        "zone_name": zone.name,
+        "population_affected": pop_affected,
+        "populationAffected": pop_affected,
+        "buildings_at_risk": buildings,
+        "buildingsAtRisk": buildings,
+        "schools_affected": schools,
+        "schoolsAffected": schools,
+        "hospitals_affected": hospitals,
+        "hospitalsAffected": hospitals,
+        "agricultural_area_ha": agri,
+        "agriculturalAreaHa": agri,
+        "impact_score": int(pred.risk_score),
+        "impactScore": int(pred.risk_score),
+        "economic_loss_estimate_lakhs": loss,
+        "economicLossEstimate": loss,
+        "human_risk_index": human_risk,
+        "humanRiskIndex": human_risk,
+        "infrastructure_damage": {
+            "roads_km": int(pred.predicted_depth * 8),
+            "bridges": int(pred.predicted_depth * 1.5),
+            "power_substations": int(pred.predicted_depth * 0.8)
+        }
+    }
 
 
 @router.get("/summary/aggregate")

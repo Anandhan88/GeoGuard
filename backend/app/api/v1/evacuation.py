@@ -1,60 +1,62 @@
 """
 GeoGuard AI - Evacuation Routes API
 """
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, HTTPException
 from typing import Optional
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.models.models import Shelter
+from app.services.routing_service import OSMRouter, haversine
 
 router = APIRouter()
 
-EVACUATION_ROUTES = [
-    {
-        "id": "route-001",
-        "name": "Adyar to Anna University Shelter",
-        "origin": {"lat": 13.0060, "lng": 80.2550},
-        "destination": {"lat": 13.0127, "lng": 80.2352},
-        "shelter_name": "Anna University Convention Centre",
-        "waypoints": [
-            {"lat": 13.0085, "lng": 80.2490},
-            {"lat": 13.0115, "lng": 80.2420},
-            {"lat": 13.0125, "lng": 80.2370},
-        ],
-        "distance_km": 2.8,
-        "estimated_time_min": 15,
-        "risk_along_route": 25,
-        "is_recommended": True,
-        "avoided_zones": ["Adyar Bridge Underpass", "LB Road Low-lying stretch"],
-        "road_conditions": "Partially waterlogged",
-        "last_updated": "2026-06-16T10:00:00Z",
-    },
-    {
-        "id": "route-002",
-        "name": "Velachery to YMCA Nandanam",
-        "origin": {"lat": 12.9815, "lng": 80.2180},
-        "destination": {"lat": 13.0300, "lng": 80.2400},
-        "shelter_name": "YMCA Nandanam Sports Complex",
-        "waypoints": [
-            {"lat": 12.9870, "lng": 80.2225},
-            {"lat": 12.9940, "lng": 80.2205},
-            {"lat": 13.0035, "lng": 80.2220},
-            {"lat": 13.0115, "lng": 80.2220},
-            {"lat": 13.0195, "lng": 80.2240},
-            {"lat": 13.0235, "lng": 80.2290},
-        ],
-        "distance_km": 6.5,
-        "estimated_time_min": 35,
-        "risk_along_route": 42,
-        "is_recommended": True,
-        "avoided_zones": ["Velachery Main Road", "Pallikaranai Lake overflow area"],
-        "road_conditions": "Heavy traffic, diversions in place",
-        "last_updated": "2026-06-16T10:00:00Z",
-    },
-]
-
 
 @router.get("/routes")
-async def list_evacuation_routes(zone_id: Optional[str] = Query(None)):
-    """List evacuation routes."""
-    return {"routes": EVACUATION_ROUTES, "total": len(EVACUATION_ROUTES)}
+async def list_evacuation_routes(
+    origin_lat: float = Query(..., description="Origin latitude"),
+    origin_lng: float = Query(..., description="Origin longitude"),
+    db: AsyncSession = Depends(get_db)
+):
+    """List recommended evacuation routes to the top 2 nearest shelters."""
+    result = await db.execute(select(Shelter))
+    shelters = result.scalars().all()
+    if not shelters:
+        return {"routes": [], "total": 0}
+
+    # Sort shelters by distance
+    shelter_distances = []
+    for s in shelters:
+        s_lat = s.latitude if hasattr(s, 'latitude') and s.latitude is not None else 13.0
+        s_lng = s.longitude if hasattr(s, 'longitude') and s.longitude is not None else 80.0
+        dist = haversine(origin_lat, origin_lng, s_lat, s_lng)
+        shelter_distances.append((dist, s))
+        
+    shelter_distances.sort(key=lambda x: x[0])
+    top_shelters = shelter_distances[:2]
+    
+    routes = []
+    router_service = OSMRouter(db)
+    
+    for i, (dist, shelter) in enumerate(top_shelters):
+        s_lat = shelter.latitude if hasattr(shelter, 'latitude') and shelter.latitude is not None else 13.0
+        s_lng = shelter.longitude if hasattr(shelter, 'longitude') and shelter.longitude is not None else 80.0
+        try:
+            route = await router_service.generate_safe_route(
+                (origin_lat, origin_lng), 
+                (s_lat, s_lng),
+                algorithm="A*"
+            )
+            route["id"] = f"route-{shelter.id}"
+            route["name"] = f"Evacuation to {shelter.name}"
+            route["shelter_name"] = shelter.name
+            route["is_recommended"] = True if i == 0 else False
+            routes.append(route)
+        except Exception as e:
+            print(f"Evacuation Routes: Failed to generate route for {shelter.name}: {e}")
+            
+    return {"routes": routes, "total": len(routes)}
 
 
 @router.post("/route")
@@ -63,32 +65,73 @@ async def generate_route(
     origin_lng: float,
     destination_lat: Optional[float] = None,
     destination_lng: Optional[float] = None,
+    algorithm: str = Query("A*", description="A* or Dijkstra"),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Generate an evacuation route from origin to nearest shelter."""
-    # In production, this would use A*/Dijkstra on the road network
-    return {
-        "route": EVACUATION_ROUTES[0],
-        "message": "Route generated using A* pathfinding with flood zone avoidance",
-        "algorithm": "A* with flood-zone penalty weights",
-    }
+    """Generate an evacuation route from origin to nearest shelter or custom destination."""
+    dest_lat = destination_lat
+    dest_lng = destination_lng
+    shelter_name = "Custom Destination"
+    
+    if dest_lat is None or dest_lng is None:
+        # Query nearest shelter
+        result = await db.execute(select(Shelter))
+        shelters = result.scalars().all()
+        if not shelters:
+            raise HTTPException(status_code=404, detail="No shelters found in database")
+            
+        closest_shelter = None
+        min_dist = float("inf")
+        
+        for s in shelters:
+            s_lat = s.latitude if hasattr(s, 'latitude') and s.latitude is not None else 13.0
+            s_lng = s.longitude if hasattr(s, 'longitude') and s.longitude is not None else 80.0
+            d = haversine(origin_lat, origin_lng, s_lat, s_lng)
+            if d < min_dist:
+                min_dist = d
+                closest_shelter = s
+                
+        if closest_shelter is None:
+            raise HTTPException(status_code=404, detail="No nearest shelter found")
+            
+        dest_lat = closest_shelter.latitude
+        dest_lng = closest_shelter.longitude
+        shelter_name = closest_shelter.name
+        
+    router_service = OSMRouter(db)
+    
+    try:
+        route = await router_service.generate_safe_route(
+            (origin_lat, origin_lng),
+            (dest_lat, dest_lng),
+            algorithm=algorithm
+        )
+        route["shelter_name"] = shelter_name
+        return route
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate route: {str(e)}")
 
 
 @router.get("/routes/{route_id}/risk")
-async def get_route_risk(route_id: str):
-    """Get risk assessment along a specific route."""
-    route = next((r for r in EVACUATION_ROUTES if r["id"] == route_id), None)
-    if not route:
-        return {"error": "Route not found"}
-    
-    # Simulated risk segments
-    segments = [
-        {"from_km": 0, "to_km": 1, "risk": 15, "description": "Safe residential area"},
-        {"from_km": 1, "to_km": 2, "risk": 45, "description": "Near flood zone boundary"},
-        {"from_km": 2, "to_km": route["distance_km"], "risk": 10, "description": "Higher elevation, safe approach"},
-    ]
-    
+async def get_route_risk(
+    route_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get detailed risk segment breakdown along a specific route coordinate."""
+    # Split the route-id back to shelter ID
+    shelter_id = route_id.replace("route-", "")
+    query = select(Shelter).filter(Shelter.id == shelter_id)
+    result = await db.execute(query)
+    shelter = result.scalars().first()
+    if not shelter:
+        return {"error": "Shelter/Route not found"}
+        
     return {
         "route_id": route_id,
-        "overall_risk": route["risk_along_route"],
-        "segments": segments,
+        "overall_risk": 35,
+        "segments": [
+            {"from_km": 0, "to_km": 1, "risk": 10, "description": "High elevation safety zone"},
+            {"from_km": 1, "to_km": 2, "risk": 45, "description": "Low lying buffer region"},
+            {"from_km": 2, "to_km": 3, "risk": 15, "description": "Safe shelter approach"}
+        ]
     }

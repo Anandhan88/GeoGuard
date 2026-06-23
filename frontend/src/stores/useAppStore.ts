@@ -367,9 +367,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Evacuation
   evacuationRoutes: mockEvacuationRoutes,
-  fetchEvacuationRoutes: async () => {
+  fetchEvacuationRoutes: async (lat?: number, lng?: number) => {
     try {
-      const res = await api.get('/evacuation/routes');
+      const current_lat = lat ?? 10.7905;
+      const current_lng = lng ?? 78.7047;
+      const res = await api.get(`/evacuation/routes?origin_lat=${current_lat}&origin_lng=${current_lng}`);
       const routes = res.data.routes;
       set({ evacuationRoutes: routes.length > 0 ? routes : mockEvacuationRoutes });
     } catch {

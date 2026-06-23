@@ -26,6 +26,17 @@ engine = create_async_engine(
     **engine_kwargs,
 )
 
+from sqlalchemy import event
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if settings.DATABASE_URL.startswith("sqlite"):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.execute("PRAGMA cache_size=-64000") # 64MB cache
+        cursor.close()
+
 # Async session factory
 async_session_maker = async_sessionmaker(
     bind=engine,
@@ -39,6 +50,11 @@ Base = declarative_base()
 
 async def init_db():
     """Initializes the database schemas (creates all tables)."""
+    # Enable PostGIS extension if running on PostgreSQL
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        async with engine.begin() as conn:
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+            
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

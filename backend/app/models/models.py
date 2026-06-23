@@ -15,6 +15,67 @@ IS_POSTGRES = settings.DATABASE_URL.startswith("postgresql")
 if IS_POSTGRES:
     from geoalchemy2 import Geometry
 
+# Helper functions for PostGIS coordinate and GeoJSON mapping
+def _get_point_coord(location, index):
+    if location is None:
+        return None
+    try:
+        from geoalchemy2.elements import WKTElement
+        from geoalchemy2.shape import to_shape
+        if isinstance(location, WKTElement):
+            text = str(location.data)
+            if "POINT" in text.upper():
+                coords = text.upper().replace("POINT", "").replace("(", "").replace(")", "").strip().split()
+                return float(coords[index])
+        geom = to_shape(location)
+        return geom.y if index == 1 else geom.x
+    except Exception:
+        return None
+
+def _set_point_coord(instance, lat=None, lng=None):
+    try:
+        from geoalchemy2.elements import WKTElement
+        current_lat = lat
+        current_lng = lng
+        if lat is None:
+            current_lat = instance.latitude
+        if lng is None:
+            current_lng = instance.longitude
+        
+        if current_lat is not None and current_lng is not None:
+            instance.location = WKTElement(f"POINT({current_lng} {current_lat})", srid=4326)
+    except Exception:
+        pass
+
+def _get_geojson_geom(geometry):
+    if geometry is None:
+        return None
+    try:
+        from geoalchemy2.elements import WKTElement
+        from geoalchemy2.shape import to_shape
+        from shapely.geometry import mapping
+        if isinstance(geometry, WKTElement):
+            from shapely.wkt import loads
+            geom = loads(str(geometry.data))
+            return mapping(geom)
+        geom = to_shape(geometry)
+        return mapping(geom)
+    except Exception:
+        return None
+
+def _set_geojson_geom(instance, attr_name, val):
+    if val is not None:
+        try:
+            from geoalchemy2.elements import WKTElement
+            from shapely.geometry import shape
+            import json
+            if isinstance(val, str):
+                val = json.loads(val)
+            geom = shape(val)
+            setattr(instance, attr_name, WKTElement(geom.wkt, srid=4326))
+        except Exception:
+            pass
+
 
 class User(Base):
     """User accounts and roles."""
@@ -31,6 +92,22 @@ class User(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)
@@ -52,6 +129,14 @@ class RiskZone(Base):
 
     if IS_POSTGRES:
         boundary = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
+        
+        @property
+        def boundary_json(self):
+            return _get_geojson_geom(self.boundary)
+
+        @boundary_json.setter
+        def boundary_json(self, val):
+            _set_geojson_geom(self, 'boundary', val)
     else:
         # Stored as serialized geojson or bounds bounding box representation
         boundary_json = Column(JSON, nullable=True)
@@ -66,7 +151,7 @@ class CitizenReport(Base):
     __tablename__ = "citizen_reports"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), index=True, nullable=False)
     type = Column(String(100), nullable=False)  # flood, water_logging, blocked_road, fire, other
     description = Column(Text, nullable=False)
     severity = Column(Integer, default=1)  # 1 to 5
@@ -76,6 +161,22 @@ class CitizenReport(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)
@@ -100,6 +201,22 @@ class WeatherData(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)
@@ -110,7 +227,7 @@ class FloodPrediction(Base):
     __tablename__ = "flood_predictions"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    zone_id = Column(String(36), ForeignKey("risk_zones.id"), nullable=False)
+    zone_id = Column(String(36), ForeignKey("risk_zones.id"), index=True, nullable=False)
     risk_score = Column(Float, default=0.0)  # 0 to 100
     probability = Column(Float, default=0.0)  # 0 to 1
     confidence = Column(Float, default=0.0)  # 0 to 1
@@ -122,6 +239,14 @@ class FloodPrediction(Base):
 
     if IS_POSTGRES:
         area = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
+        
+        @property
+        def area_json(self):
+            return _get_geojson_geom(self.area)
+
+        @area_json.setter
+        def area_json(self, val):
+            _set_geojson_geom(self, 'area', val)
     else:
         area_json = Column(JSON, nullable=True)
 
@@ -144,6 +269,22 @@ class Shelter(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)
@@ -162,6 +303,14 @@ class Road(Base):
 
     if IS_POSTGRES:
         geometry = Column(Geometry(geometry_type='LINESTRING', srid=4326), nullable=True)
+        
+        @property
+        def geometry_json(self):
+            return _get_geojson_geom(self.geometry)
+
+        @geometry_json.setter
+        def geometry_json(self, val):
+            _set_geojson_geom(self, 'geometry', val)
     else:
         geometry_json = Column(JSON, nullable=True)
 
@@ -178,6 +327,14 @@ class Village(Base):
 
     if IS_POSTGRES:
         geometry = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
+        
+        @property
+        def geometry_json(self):
+            return _get_geojson_geom(self.geometry)
+
+        @geometry_json.setter
+        def geometry_json(self, val):
+            _set_geojson_geom(self, 'geometry', val)
     else:
         geometry_json = Column(JSON, nullable=True)
 
@@ -194,6 +351,22 @@ class ResourceCenter(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)
@@ -207,12 +380,20 @@ class Alert(Base):
     type = Column(String(100), nullable=False)  # Flood Warning, Cyclone Alert, Evacuation Order
     severity = Column(String(50), default="moderate")  # info, moderate, severe, extreme
     message = Column(Text, nullable=False)
-    target_zone_id = Column(String(36), ForeignKey("risk_zones.id"), nullable=True)
+    target_zone_id = Column(String(36), ForeignKey("risk_zones.id"), index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
 
     if IS_POSTGRES:
         area = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
+        
+        @property
+        def area_json(self):
+            return _get_geojson_geom(self.area)
+
+        @area_json.setter
+        def area_json(self, val):
+            _set_geojson_geom(self, 'area', val)
     else:
         area_json = Column(JSON, nullable=True)
 
@@ -232,6 +413,14 @@ class SatelliteImage(Base):
 
     if IS_POSTGRES:
         bounds = Column(Geometry(geometry_type='POLYGON', srid=4326), nullable=True)
+        
+        @property
+        def bounds_json(self):
+            return _get_geojson_geom(self.bounds)
+
+        @bounds_json.setter
+        def bounds_json(self, val):
+            _set_geojson_geom(self, 'bounds', val)
     else:
         bounds_json = Column(JSON, nullable=True)
 
@@ -250,6 +439,22 @@ class DamageReport(Base):
 
     if IS_POSTGRES:
         location = Column(Geometry(geometry_type='POINT', srid=4326), nullable=True)
+        
+        @property
+        def latitude(self):
+            return _get_point_coord(self.location, 1)
+
+        @latitude.setter
+        def latitude(self, val):
+            _set_point_coord(self, lat=val)
+
+        @property
+        def longitude(self):
+            return _get_point_coord(self.location, 0)
+
+        @longitude.setter
+        def longitude(self, val):
+            _set_point_coord(self, lng=val)
     else:
         latitude = Column(Float, nullable=True)
         longitude = Column(Float, nullable=True)

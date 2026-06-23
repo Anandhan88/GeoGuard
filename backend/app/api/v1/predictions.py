@@ -16,11 +16,11 @@ router = APIRouter()
 
 # Center coordinates matching the frontend
 ZONE_CENTERS = {
-    "zone-001": {"lat": 13.0067, "lng": 80.2206}, # Adyar
-    "zone-002": {"lat": 13.0827, "lng": 80.2707}, # Cooum
-    "zone-003": {"lat": 12.9815, "lng": 80.2180}, # Velachery
-    "zone-004": {"lat": 13.0339, "lng": 80.2697}, # Mylapore
-    "zone-005": {"lat": 12.9260, "lng": 80.1020}, # Tambaram
+    "zone-001": {"lat": 13.0827, "lng": 80.2707}, # Chennai Basin
+    "zone-002": {"lat": 10.7905, "lng": 78.7047}, # Cauvery River Basin, Trichy
+    "zone-003": {"lat": 9.9252, "lng": 78.1198}, # Vaigai River Basin, Madurai
+    "zone-004": {"lat": 11.0168, "lng": 76.9558}, # Bhavani River Corridor, Coimbatore
+    "zone-005": {"lat": 8.7139, "lng": 77.7567}, # Thamirabarani Basin, Tirunelveli
 }
 
 
@@ -32,20 +32,19 @@ async def list_predictions(
     db: AsyncSession = Depends(get_db)
 ):
     """List all flood predictions with optional filtering."""
-    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone))
+    query = select(FloodPrediction).join(FloodPrediction.zone).options(joinedload(FloodPrediction.zone))
     
     if min_score is not None:
         query = query.filter(FloodPrediction.risk_score >= min_score)
+        
+    if risk_level:
+        query = query.filter(RiskZone.risk_level == risk_level)
         
     result = await db.execute(query)
     predictions = result.scalars().unique().all()
     
     response = []
     for pred in predictions:
-        # Check risk level filter from the zone
-        if risk_level and pred.zone.risk_level != risk_level:
-            continue
-            
         affected_pop = int(pred.zone.population * (pred.risk_score / 100))
         response.append({
             "id": pred.id,
@@ -144,8 +143,9 @@ async def get_heatmap_data(db: AsyncSession = Depends(get_db)):
 
 @router.post("/generate")
 async def generate_predictions(db: AsyncSession = Depends(get_db)):
-    """Trigger prediction pipeline, executing ML simulation for all zones."""
+    """Trigger prediction pipeline, executing ML model inference with live weather for all zones."""
     from app.ml.prediction.risk_engine import RiskEngine
+    from app.api.v1.weather import fetch_live_openmeteo, map_wmo_code
     from datetime import datetime, timedelta
     
     engine = RiskEngine()
@@ -157,43 +157,49 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
     predictions_generated = []
     
     for zone in zones:
-        # Simulate weather and hydrologic inputs per zone
-        if "Adyar" in zone.name:
-            inputs = {
-                "river_level": random.uniform(3.8, 4.5),
-                "rainfall_intensity": random.uniform(70, 90),
-                "soil_saturation": random.uniform(85, 95),
-                "drainage_capacity": random.uniform(30, 40),
-                "upstream_reservoir": random.uniform(80, 90),
-                "tide_level": random.uniform(1.2, 1.6),
-            }
-        elif "Velachery" in zone.name:
-            inputs = {
-                "river_level": random.uniform(2.5, 3.2),
-                "rainfall_intensity": random.uniform(80, 100),
-                "soil_saturation": random.uniform(90, 98),
-                "drainage_capacity": random.uniform(20, 30),
-                "upstream_reservoir": random.uniform(50, 70),
-                "tide_level": random.uniform(0.8, 1.2),
-            }
-        elif "Cooum" in zone.name:
-            inputs = {
-                "river_level": random.uniform(3.2, 3.9),
-                "rainfall_intensity": random.uniform(50, 70),
-                "soil_saturation": random.uniform(75, 88),
-                "drainage_capacity": random.uniform(40, 50),
-                "upstream_reservoir": random.uniform(60, 80),
-                "tide_level": random.uniform(0.9, 1.3),
-            }
-        else:
-            inputs = {
-                "river_level": random.uniform(1.5, 2.5),
-                "rainfall_intensity": random.uniform(20, 50),
-                "soil_saturation": random.uniform(50, 70),
-                "drainage_capacity": random.uniform(60, 80),
-                "upstream_reservoir": random.uniform(40, 60),
-                "tide_level": random.uniform(0.4, 0.9),
-            }
+        coords = ZONE_CENTERS.get(zone.id, {"lat": 13.0827, "lng": 80.2707})
+        
+        # 1. Fetch real-time weather
+        try:
+            weather_data = await fetch_live_openmeteo(coords["lat"], coords["lng"])
+            current = weather_data.get("current", {})
+            rainfall = current.get("precipitation", 0.0)
+            temp = current.get("temperature_2m", 28.0)
+            humidity = current.get("relative_humidity_2m", 80.0)
+        except Exception as e:
+            print(f"Predictions Pipeline: Weather fetch failed for {zone.name}: {e}")
+            # fallbacks
+            rainfall = 25.0 if zone.risk_level == "critical" else 5.0
+            temp = 28.0
+            humidity = 85.0
+            
+        # 2. Translate rainfall to hydrologic factors dynamically
+        # River level rises with heavy rain
+        river_level = 1.8 + (rainfall * 0.08) + random.uniform(-0.1, 0.2)
+        river_level = min(6.0, max(0.5, river_level))
+        
+        # Soil saturation rises with rain and high humidity
+        soil_saturation = min(100.0, max(10.0, humidity * 0.8 + (rainfall * 1.5)))
+        
+        # Drainage capacity drops when flooded (high rain)
+        drainage_capacity = max(10.0, min(100.0, 90.0 - (rainfall * 1.8) - random.uniform(0, 10)))
+        
+        # Upstream reservoirs fill up with precipitation
+        upstream_reservoir = min(100.0, max(30.0, 55.0 + (rainfall * 1.5) + random.uniform(-5, 10)))
+        
+        # Coast/tide considerations
+        tide_level = 0.5 + (0.8 if "Chennai" in zone.name else 0.0) + random.uniform(-0.2, 0.4)
+        
+        inputs = {
+            "river_level": river_level,
+            "rainfall_intensity": rainfall,
+            "soil_saturation": soil_saturation,
+            "drainage_capacity": drainage_capacity,
+            "upstream_reservoir": upstream_reservoir,
+            "tide_level": tide_level,
+            "temperature": temp,
+            "humidity": humidity
+        }
         
         # Run Risk Engine
         risk_result = engine.predict_risk(inputs)
@@ -201,9 +207,10 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
         # Update zone's risk level in db
         zone.risk_level = risk_result["risk_level"]
         
-        # Simulate depth & duration
-        predicted_depth = round(random.uniform(1.2, 2.2) if zone.risk_level in ["critical", "high"] else random.uniform(0.1, 0.8), 2)
-        predicted_duration = round(random.choice([12.0, 24.0, 36.0, 48.0, 60.0]))
+        # Calculate dynamic depth and duration
+        predicted_depth = round(1.2 + (rainfall * 0.02) if zone.risk_level in ["critical", "high"] else 0.1 + (rainfall * 0.01), 2)
+        predicted_depth = min(3.5, max(0.0, predicted_depth))
+        predicted_duration = float(random.choice([12, 24, 36, 48, 72])) if rainfall > 5.0 else 0.0
         
         # Check if prediction already exists for this zone
         pred_result = await db.execute(

@@ -5,6 +5,7 @@ import {
   MapPin, Building, Navigation, Droplets, RefreshCw, Copy,
 } from 'lucide-react';
 import { useAppStore } from '../stores/useAppStore';
+import { api } from '../utils/api';
 
 interface Message {
   id: string;
@@ -23,62 +24,8 @@ const QUICK_QUESTIONS = [
   { text: 'Which zones have critical risk scores?', icon: MapPin },
 ];
 
-function getAIResponse(query: string, predictions: any[], shelters: any[], alerts: any[]): string {
-  const q = query.toLowerCase();
-
-  if (q.includes('flood') && (q.includes('risk') || q.includes('zone') || q.includes('area'))) {
-    const criticalZones = predictions.filter(p => p.riskLevel === 'critical' || p.riskScore >= 80);
-    const highZones = predictions.filter(p => p.riskLevel === 'high' && p.riskScore < 80);
-    return `**Current Flood Risk Analysis:**\n\n🔴 **Critical Risk Zones (${criticalZones.length}):**\n${criticalZones.map(z => `• ${z.zoneName} — Risk Score: ${z.riskScore}/100, Predicted depth: ${z.predictedDepth}m`).join('\n') || 'None currently'}\n\n🟠 **High Risk Zones (${highZones.length}):**\n${highZones.map(z => `• ${z.zoneName} — Risk Score: ${z.riskScore}/100`).join('\n') || 'None currently'}\n\n⚠️ **Recommendation:** Residents in critical zones should evacuate immediately. Keep emergency kit ready and monitor alerts.`;
-  }
-
-  if (q.includes('shelter')) {
-    const available = shelters.filter(s => (s.currentOccupancy / s.capacity) < 0.9);
-    const topShelters = available.slice(0, 3);
-    return `**Available Shelter Centers:**\n\n${topShelters.map(s => {
-      const pct = Math.round((s.currentOccupancy / s.capacity) * 100);
-      const avail = s.capacity - s.currentOccupancy;
-      return `🏠 **${s.name}**\n   📍 ${s.address || 'Location on map'}\n   👥 ${avail} spaces available (${pct}% full)\n   ✅ Amenities: ${(s.amenities || []).slice(0, 3).join(', ')}`;
-    }).join('\n\n')}\n\n📞 Contact local authorities for transport assistance. View all shelters in the Shelters section.`;
-  }
-
-  if (q.includes('evacuation') || q.includes('route') || q.includes('escape')) {
-    return `**Recommended Evacuation Routes:**\n\n🟢 **Route 1 — Adyar to Anna University** (Recommended)\n   📍 Distance: 2.8 km | ⏱️ Est. 15 mins\n   ✅ Avoids: Adyar Bridge underpass, LB Road low-lying stretch\n   🏠 Destination: Anna University Convention Centre (187/500 occupied)\n\n🟢 **Route 2 — Velachery to YMCA Nandanam**\n   📍 Distance: 6.5 km | ⏱️ Est. 35 mins\n   ✅ Avoids: Velachery Main Road, Pallikaranai overflow area\n   🏠 Destination: YMCA Nandanam Sports Complex (310/800 occupied)\n\n⚠️ **Important:** Do not attempt flooded roads. Follow official route markers.`;
-  }
-
-  if (q.includes('rainfall') || q.includes('weather') || q.includes('forecast')) {
-    return `**Current Weather & Rainfall Forecast:**\n\n🌡️ Temperature: 29°C | 💧 Humidity: 85%\n🌧️ Current Rainfall: 45.2mm | 💨 Wind: 32 km/h NE\n\n**Next 24 Hours:**\n• Tonight (6PM–12AM): 72–85 mm/hr — Very Heavy\n• Late Night (12AM–6AM): 45–65 mm/hr — Heavy\n• Tomorrow Morning: Rainfall easing to 30–40 mm/hr\n\n⚠️ **IMD Warning:** Very Heavy Rainfall Warning active for Chennai. Accumulated rainfall may reach 150–200mm in 24 hours.`;
-  }
-
-  if (q.includes('report') || q.includes('incident') || q.includes('submit')) {
-    return `**How to Submit an Incident Report:**\n\n1. 📍 Go to **Submit Report** in the sidebar\n2. 🏷️ Select the incident type (Flood, Road Blocked, Power Outage, etc.)\n3. 📝 Describe the situation in detail\n4. ⚠️ Set severity level (1-5)\n5. 📍 Use GPS or enter location manually\n6. 📤 Tap **Submit Report**\n\nReports are reviewed by authorities within minutes. Verified reports appear on the live map for all users.\n\n✅ Your report directly helps coordinate rescue and relief operations!`;
-  }
-
-  if (q.includes('critical') || q.includes('score') || q.includes('highest risk')) {
-    const sorted = [...predictions].sort((a, b) => b.riskScore - a.riskScore).slice(0, 4);
-    return `**Zones Ranked by Risk Score:**\n\n${sorted.map((p, i) => {
-      const emoji = i === 0 ? '🔴' : i === 1 ? '🔴' : i === 2 ? '🟠' : '🟡';
-      return `${emoji} **${p.zoneName}**\n   Risk: ${p.riskScore}/100 | Level: ${p.riskLevel.toUpperCase()}\n   Population at Risk: ${p.affectedPopulation?.toLocaleString() || 'N/A'}\n   Predicted Depth: ${p.predictedDepth}m for ${p.predictedDuration}h`;
-    }).join('\n\n')}\n\n📊 Run **Generate Predictions** in Authority View for an updated analysis.`;
-  }
-
-  if (q.includes('alert') || q.includes('warning')) {
-    const activeAlerts = alerts.filter(a => a.isActive);
-    return `**Active Emergency Alerts (${activeAlerts.length}):**\n\n${activeAlerts.map(a => {
-      const emoji = a.severity === 'extreme' || a.severity === 'critical' ? '🔴' : a.severity === 'severe' ? '🟠' : '🟡';
-      return `${emoji} **${a.severity?.toUpperCase()}** — ${a.type}\n   ${a.title || a.message?.slice(0, 80)}`;
-    }).join('\n\n')}\n\nStay tuned to official channels. Visit the **Alerts** section for full details.`;
-  }
-
-  if (q.includes('help') || q.includes('emergency') || q.includes('sos')) {
-    return `**Emergency Contacts & Helplines:**\n\n🚨 **National Disaster Management:** 1078\n🚒 **Fire & Rescue:** 101\n🚑 **Ambulance:** 108\n👮 **Police:** 100\n📞 **NDRF Helpline:** 011-24363260\n🏥 **Tamil Nadu State Emergency:** 1070\n\n**Immediate Safety Steps:**\n1. Move to higher ground immediately\n2. Avoid walking/driving through floodwater\n3. Keep emergency kit ready (documents, medicine, water)\n4. Follow official evacuation orders\n5. Charge devices and stay connected`;
-  }
-
-  return `I'm GeoGuard AI, your disaster intelligence assistant. I can help you with:\n\n• 🗺️ **Flood risk zones** and predictions\n• 🏠 **Shelter locations** and availability\n• 🧭 **Evacuation routes** and guidance\n• 🌧️ **Weather forecasts** and warnings\n• 📋 **How to submit** incident reports\n• 🚨 **Emergency contacts** and procedures\n• 📊 **Risk scores** and impact analysis\n\nAsk me anything about the current disaster situation in Chennai!`;
-}
-
 export default function AIAssistantPage() {
-  const { predictions, shelters, alerts } = useAppStore();
+  const { currentLanguage } = useAppStore();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '0',
@@ -108,19 +55,28 @@ export default function AIAssistantPage() {
     setInputText('');
     setIsTyping(true);
 
-    // Simulate AI response delay
-    const delay = 600 + Math.random() * 800;
-    setTimeout(() => {
-      const aiContent = getAIResponse(text, predictions, shelters, alerts);
+    try {
+      const response = await api.get(`/chat?query=${encodeURIComponent(text.trim())}&lang=${currentLanguage}`);
+      const aiContent = response.data.response;
       const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: Date.now().toString(),
         role: 'assistant',
         content: aiContent,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMsg]);
+    } catch (err) {
+      console.error("Chat error:", err);
+      const aiMsg: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: "Sorry, I'm having trouble connecting to the disaster intelligence service right now. Please try again or contact emergency numbers directly.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    } finally {
       setIsTyping(false);
-    }, delay);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
