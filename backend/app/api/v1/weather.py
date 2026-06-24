@@ -192,13 +192,165 @@ def get_hourly_forecast(base_date: datetime = None):
     return hourly
 
 
+def owm_id_to_wmo_code(owm_id: int) -> int:
+    """Maps OpenWeatherMap weather conditions to WMO weather codes."""
+    if 200 <= owm_id < 300:
+        return 95  # Thunderstorm
+    elif 300 <= owm_id < 400:
+        return 51  # Drizzle
+    elif 500 <= owm_id < 600:
+        if owm_id in [502, 503, 504, 522, 524]:
+            return 65  # Heavy rain
+        return 61  # Moderate rain
+    elif 600 <= owm_id < 700:
+        return 71  # Snow
+    elif 700 <= owm_id < 800:
+        return 45  # Fog
+    elif owm_id == 800:
+        return 0  # Clear sky
+    elif owm_id == 801:
+        return 1  # Partly cloudy
+    elif owm_id in [802, 803]:
+        return 2  # Cloudy
+    else:
+        return 3  # Overcast
+
+
+async def fetch_live_openweather(lat: float, lng: float, api_key: str) -> dict:
+    """Fetch live current and forecast data from OpenWeatherMap API and adapter-map it to Open-Meteo schema."""
+    client = get_http_client()
+    
+    # 1. Fetch current weather
+    current_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lng}&appid={api_key}&units=metric"
+    curr_res = await client.get(current_url)
+    if curr_res.status_code != 200:
+        raise Exception(f"OpenWeather Map Current API failed: status {curr_res.status_code}")
+    curr_data = curr_res.json()
+    
+    # 2. Fetch forecast weather (5 day / 3 hour)
+    forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lng}&appid={api_key}&units=metric"
+    fore_res = await client.get(forecast_url)
+    if fore_res.status_code != 200:
+        raise Exception(f"OpenWeather Map Forecast API failed: status {fore_res.status_code}")
+    fore_data = fore_res.json()
+    
+    # ─── Mapping Current ───
+    main = curr_data.get("main", {})
+    wind = curr_data.get("wind", {})
+    rain = curr_data.get("rain", {})
+    weather_list = curr_data.get("weather", [{}])
+    owm_weather_id = weather_list[0].get("id", 800)
+    wmo_code = owm_id_to_wmo_code(owm_weather_id)
+    
+    # Wind speed: OWM in m/s, convert to km/h (multiply by 3.6)
+    wind_speed_kmh = wind.get("speed", 0.0) * 3.6
+    
+    # Rainfall in past 1h
+    precipitation = rain.get("1h", 0.0)
+    
+    current_mapped = {
+        "temperature_2m": main.get("temp", 28.0),
+        "relative_humidity_2m": main.get("humidity", 80),
+        "precipitation": precipitation,
+        "rain": precipitation,
+        "weather_code": wmo_code,
+        "pressure_msl": main.get("pressure", 1008.0),
+        "wind_speed_10m": wind_speed_kmh,
+        "wind_direction_10m": wind.get("deg", 0.0)
+    }
+    
+    # ─── Mapping Hourly Forecast (8 intervals = 24 hours) ───
+    list_3h = fore_data.get("list", [])
+    hourly_times = []
+    hourly_precip = []
+    for item in list_3h[:8]:
+        dt_txt = item.get("dt_txt", "")
+        time_iso = dt_txt.replace(" ", "T")[:-3] if dt_txt else datetime.utcnow().strftime("%Y-%m-%dT%H:00")
+        hourly_times.append(time_iso)
+        
+        # 3h rain to 1h average
+        rain_val = item.get("rain", {}).get("3h", 0.0) / 3.0
+        hourly_precip.append(rain_val)
+        
+    hourly_mapped = {
+        "time": hourly_times,
+        "precipitation": hourly_precip
+    }
+    
+    # ─── Mapping Daily Forecast (5 days) ───
+    from collections import defaultdict
+    daily_groups = defaultdict(list)
+    for item in list_3h:
+        dt_txt = item.get("dt_txt", "")
+        if dt_txt:
+            date_str = dt_txt.split(" ")[0]
+            daily_groups[date_str].append(item)
+            
+    sorted_dates = sorted(daily_groups.keys())[:5]
+    
+    daily_times = []
+    daily_codes = []
+    daily_temp_max = []
+    daily_temp_min = []
+    daily_precip_sum = []
+    
+    for d_str in sorted_dates:
+        items = daily_groups[d_str]
+        daily_times.append(d_str)
+        
+        temps = [it.get("main", {}).get("temp", 28.0) for it in items]
+        max_t = max(temps) if temps else 30.0
+        min_t = min(temps) if temps else 24.0
+        
+        # Sum 3-hour precipitation
+        day_precip = sum(it.get("rain", {}).get("3h", 0.0) for it in items)
+        
+        # Most frequent weather code for the day
+        weather_ids = [it.get("weather", [{}])[0].get("id", 800) for it in items]
+        if weather_ids:
+            from collections import Counter
+            common_id = Counter(weather_ids).most_common(1)[0][0]
+        else:
+            common_id = 800
+        wmo_daily_code = owm_id_to_wmo_code(common_id)
+        
+        daily_codes.append(wmo_daily_code)
+        daily_temp_max.append(max_t)
+        daily_temp_min.append(min_t)
+        daily_precip_sum.append(day_precip)
+        
+    daily_mapped = {
+        "time": daily_times,
+        "weather_code": daily_codes,
+        "temperature_2m_max": daily_temp_max,
+        "temperature_2m_min": daily_temp_min,
+        "precipitation_sum": daily_precip_sum
+    }
+    
+    return {
+        "current": current_mapped,
+        "hourly": hourly_mapped,
+        "daily": daily_mapped
+    }
+
+
 async def fetch_live_openmeteo(lat: float, lng: float):
-    """Fetch live data from Open-Meteo API for given coordinates."""
+    """Fetch live data. Uses OpenWeatherMap API if a key is configured, falling back to Open-Meteo."""
+    if settings.OPENWEATHER_API_KEY and settings.OPENWEATHER_API_KEY.strip():
+        try:
+            data = await fetch_live_openweather(lat, lng, settings.OPENWEATHER_API_KEY)
+            data["source"] = "OpenWeatherMap Real-Time API"
+            return data
+        except Exception as e:
+            print(f"OpenWeather API failed for ({lat}, {lng}): {e}. Falling back to Open-Meteo.")
+
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,relative_humidity_2m,precipitation,rain,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m&hourly=precipitation,temperature_2m,relative_humidity_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto"
     client = get_http_client()
     response = await client.get(url)
     if response.status_code == 200:
-        return response.json()
+        data = response.json()
+        data["source"] = "Open-Meteo Real-Time API"
+        return data
     raise Exception(f"Unsuccessful weather API request: status {response.status_code}")
 
 
@@ -328,8 +480,8 @@ async def get_current_weather(
             "forecast": forecast,
             "hourlyForecast": hourly_forecast,
             "extremeWeatherWarning": precip > 50.0,
-            "imdWarning": "Heavy Rainfall Warning from Open-Meteo." if precip > 10.0 else "",
-            "source": "Open-Meteo Real-Time API"
+            "imdWarning": f"Heavy Rainfall Warning from {data.get('source', 'Open-Meteo')}." if precip > 10.0 else "",
+            "source": data.get("source", "Open-Meteo Real-Time API")
         }
         await WeatherCache.set(cache_key, result, expire_seconds=600)
         return result
@@ -392,7 +544,7 @@ async def get_forecast(
             })
         result = {
             "forecast": forecast,
-            "source": "Open-Meteo Real-Time API",
+            "source": data.get("source", "Open-Meteo Real-Time API"),
             "location": f"({current_lat:.4f}, {current_lng:.4f})",
             "generated_at": datetime.utcnow().isoformat() + "Z",
         }
