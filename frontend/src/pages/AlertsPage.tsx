@@ -11,7 +11,7 @@ import { getAlertSeverityColor, formatDate, formatTime } from '../utils/helpers'
 
 
 export default function AlertsPage() {
-  const { alerts, fetchAlerts, user, predictions, fetchPredictions, createAlert, isLoading } = useAppStore();
+  const { alerts, fetchAlerts, user, predictions, fetchPredictions, createAlert, isLoading, selectedLocation } = useAppStore();
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,9 +25,11 @@ export default function AlertsPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    fetchAlerts();
-    fetchPredictions();
-  }, []);
+    if (selectedLocation) {
+      fetchAlerts();
+      fetchPredictions();
+    }
+  }, [selectedLocation]);
 
   useEffect(() => {
     if (searchParams.get('create') === 'true') {
@@ -35,6 +37,8 @@ export default function AlertsPage() {
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+
 
   const handleCreateAlert = async (e: React.FormEvent) => {
     e.preventDefault();

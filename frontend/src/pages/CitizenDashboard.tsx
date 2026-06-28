@@ -111,17 +111,21 @@ export default function CitizenDashboard() {
     fetchShelters,
     fetchReports,
     fetchStats,
-    fetchWeather
+    fetchWeather,
+    selectedLocation
   } = useAppStore();
 
   useEffect(() => {
-    fetchPredictions();
-    fetchAlerts();
-    fetchShelters();
+    // Reports are global, so fetch them on mount
     fetchReports();
-    fetchStats();
-    fetchWeather();
-  }, []);
+    if (selectedLocation) {
+      fetchPredictions();
+      fetchAlerts();
+      fetchShelters();
+      fetchStats();
+      fetchWeather();
+    }
+  }, [selectedLocation]);
 
   const weather = liveWeather || mockWeatherData;
   const chartData = weather.hourlyForecast?.map((h: any) => ({
@@ -152,7 +156,7 @@ export default function CitizenDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-white">{t('overview')}</h1>
           <p className="text-sm text-slate-400 mt-1">
-            {t('citizen_portal_sub')}
+            {selectedLocation ? `Showing risk intelligence for ${selectedLocation.name}` : t('citizen_portal_sub')}
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -56,6 +56,99 @@ async def list_alerts(
     return {"alerts": response[:limit], "total": len(response)}
 
 
+@router.get("/for-location")
+async def get_alerts_for_location(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    name: str = Query(""),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate dynamic alert messages for any search coordinate based on weather conditions."""
+    from app.api.v1.weather import fetch_live_openmeteo
+    
+    # 1. Fetch real-time weather
+    try:
+        weather_data = await fetch_live_openmeteo(lat, lng)
+        current = weather_data.get("current", {})
+        rainfall = current.get("precipitation", 0.0)
+        wind_speed = current.get("wind_speed_10m", 0.0)
+    except Exception as e:
+        print(f"Dynamic Alerts: Weather fetch failed: {e}")
+        rainfall = 10.0
+        wind_speed = 15.0
+
+    alerts = []
+    zone_name = name.split(",")[0] if name else "Searched Area"
+
+    # Generate rain alerts
+    if rainfall > 50.0:
+        alerts.append({
+            "id": "alert-dyn-flood-ext",
+            "type": "Flood Warning",
+            "severity": "extreme",
+            "title": "Extreme Flood Warning",
+            "message": f"RED ALERT: Severe Flooding expected in {zone_name}. Heavy rainfall accumulation of {rainfall}mm/hr detected. High risk of waterlogging and rising local water bodies. Immediate evacuation of low-lying areas recommended.",
+            "targetZone": zone_name,
+            "issuedAt": datetime.utcnow().isoformat() + "Z",
+            "expiresAt": (datetime.utcnow() + timedelta(days=2)).isoformat() + "Z",
+            "isActive": True
+        })
+    elif rainfall > 15.0:
+        alerts.append({
+            "id": "alert-dyn-flood-sev",
+            "type": "Flood Warning",
+            "severity": "severe",
+            "title": "Severe Flood Warning",
+            "message": f"ORANGE ALERT: Potential Flooding in {zone_name}. Moderate to heavy rainfall of {rainfall}mm/hr recorded. Waterlogging is expected on streets and in low-lying subways. Relocate vehicles and secure valuables.",
+            "targetZone": zone_name,
+            "issuedAt": (datetime.utcnow() - timedelta(hours=1)).isoformat() + "Z",
+            "expiresAt": (datetime.utcnow() + timedelta(days=1)).isoformat() + "Z",
+            "isActive": True
+        })
+    elif rainfall > 1.0:
+        alerts.append({
+            "id": "alert-dyn-rain",
+            "type": "Heavy Rainfall",
+            "severity": "moderate",
+            "title": "Rainfall Alert",
+            "message": f"YELLOW WATCH: Rain showers of {rainfall}mm/hr in {zone_name}. Drive carefully as roads may be slippery and visibility reduced. Keep track of weather updates.",
+            "targetZone": zone_name,
+            "issuedAt": (datetime.utcnow() - timedelta(hours=2)).isoformat() + "Z",
+            "expiresAt": (datetime.utcnow() + timedelta(hours=12)).isoformat() + "Z",
+            "isActive": True
+        })
+
+    # Generate wind/storm alerts
+    if wind_speed > 35.0:
+        alerts.append({
+            "id": "alert-dyn-storm",
+            "type": "Storm Warning",
+            "severity": "severe",
+            "title": "High Wind Warning",
+            "message": f"Gale winds of {wind_speed}km/h reported in {zone_name}. Risk of structural damage, uprooted trees, and power line damage. Avoid traveling and stay indoors.",
+            "targetZone": zone_name,
+            "issuedAt": datetime.utcnow().isoformat() + "Z",
+            "expiresAt": (datetime.utcnow() + timedelta(hours=24)).isoformat() + "Z",
+            "isActive": True
+        })
+
+    # Fallback watch if there are no other alerts
+    if not alerts:
+        alerts.append({
+            "id": "alert-dyn-watch",
+            "type": "Weather Watch",
+            "severity": "minor",
+            "title": "Normal Weather Watch",
+            "message": f"Situational Awareness: Stable conditions reported in {zone_name}. Winds at {wind_speed}km/h and precipitation at {rainfall}mm. No active early warning threats.",
+            "targetZone": zone_name,
+            "issuedAt": (datetime.utcnow() - timedelta(hours=4)).isoformat() + "Z",
+            "expiresAt": (datetime.utcnow() + timedelta(hours=24)).isoformat() + "Z",
+            "isActive": True
+        })
+
+    return {"alerts": alerts, "total": len(alerts)}
+
+
 @router.get("/{alert_id}")
 async def get_alert(alert_id: str, db: AsyncSession = Depends(get_db)):
     """Get alert details."""

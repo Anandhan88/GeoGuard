@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { User, Alert, FloodPrediction, Shelter, CitizenReport, DashboardStats, WeatherData, EvacuationRoute } from '../types';
-import { mockAlerts, mockPredictions, mockShelters, mockReports, mockDashboardStats, mockWeatherData, mockEvacuationRoutes } from '../data/mockData';
+import { mockDashboardStats } from '../data/mockData';
 import { api } from '../utils/api';
+
+interface SelectedLocation {
+  name: string;
+  lat: number;
+  lng: number;
+}
 
 interface AppState {
   // Loading & Error States
@@ -23,6 +29,11 @@ interface AppState {
   // Sidebar
   sidebarOpen: boolean;
   toggleSidebar: () => void;
+
+  // ─── Selected Location (global search-driven) ───
+  selectedLocation: SelectedLocation | null;
+  setSelectedLocation: (loc: SelectedLocation | null) => void;
+  fetchLocationData: () => Promise<void>;
 
   // Alerts
   alerts: Alert[];
@@ -55,7 +66,7 @@ interface AppState {
 
   // Evacuation
   evacuationRoutes: EvacuationRoute[];
-  fetchEvacuationRoutes: () => Promise<void>;
+  fetchEvacuationRoutes: (lat?: number, lng?: number) => Promise<void>;
 
   // Stats
   stats: DashboardStats;
@@ -82,6 +93,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   currentLanguage: 'en',
+
   login: (user) => set({ user, isAuthenticated: true }),
   logout: () => {
     localStorage.removeItem('geoguard_access_token');
@@ -210,9 +222,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarOpen: true,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
 
-  // Alerts
-  alerts: mockAlerts,
-  unreadAlertCount: mockAlerts.length,
+  // ─── Selected Location ───
+  selectedLocation: { name: 'Chennai, Tamil Nadu, India', lat: 13.0827, lng: 80.2707 },
+
+  setSelectedLocation: (loc) => {
+    const finalLoc = loc || { name: 'Chennai, Tamil Nadu, India', lat: 13.0827, lng: 80.2707 };
+    set({ selectedLocation: finalLoc });
+    // Pan map to selected location
+    set({ mapCenter: [finalLoc.lat, finalLoc.lng], mapZoom: 12 });
+    // Fetch all data for this location
+    get().fetchLocationData();
+  },
+
+  fetchLocationData: async () => {
+    const loc = get().selectedLocation;
+    if (!loc) return;
+    set({ isLoading: true });
+    await Promise.all([
+      get().fetchWeather(),
+      get().fetchPredictions(),
+      get().fetchAlerts(),
+      get().fetchShelters(),
+      get().fetchReports(),
+      get().fetchEvacuationRoutes(loc.lat, loc.lng),
+    ]);
+    await get().fetchStats();
+    set({ isLoading: false });
+  },
+
+  // Alerts — empty by default, fetched for location
+  alerts: [],
+  unreadAlertCount: 0,
   markAlertRead: (id) =>
     set((s) => ({
       alerts: s.alerts.map((a) => (a.id === id ? { ...a, isActive: false } : a)),
@@ -220,17 +260,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   fetchAlerts: async () => {
-    set({ isLoading: true });
+    const loc = get().selectedLocation;
+    if (!loc) { set({ alerts: [], unreadAlertCount: 0 }); return; }
     try {
-      const res = await api.get('/alerts');
-      const alertsList = res.data.alerts;
+      const res = await api.get(`/alerts/for-location?lat=${loc.lat}&lng=${loc.lng}&name=${encodeURIComponent(loc.name)}`);
+      const alertsList = res.data.alerts || [];
       set({
-        alerts: alertsList.length > 0 ? alertsList : mockAlerts,
+        alerts: alertsList,
         unreadAlertCount: alertsList.filter((a: any) => a.isActive).length,
-        isLoading: false
       });
     } catch (err) {
-      set({ alerts: mockAlerts, unreadAlertCount: mockAlerts.length, isLoading: false });
+      set({ alerts: [], unreadAlertCount: 0 });
     }
   },
 
@@ -247,22 +287,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Predictions
-  predictions: mockPredictions,
+  // Predictions — empty by default, fetched for location
+  predictions: [],
   selectedPrediction: null,
   selectPrediction: (pred) => set({ selectedPrediction: pred, showXAIPanel: !!pred }),
 
   fetchPredictions: async () => {
-    set({ isLoading: true });
+    const loc = get().selectedLocation;
+    if (!loc) { set({ predictions: [] }); return; }
     try {
-      const res = await api.get('/predictions');
-      const predList = res.data.predictions;
-      set({
-        predictions: predList.length > 0 ? predList : mockPredictions,
-        isLoading: false
-      });
+      const res = await api.get(`/predictions/for-location?lat=${loc.lat}&lng=${loc.lng}&name=${encodeURIComponent(loc.name)}`);
+      const pred = res.data;
+      set({ predictions: pred ? [pred] : [] });
     } catch (err) {
-      set({ predictions: mockPredictions, isLoading: false });
+      set({ predictions: [] });
     }
   },
 
@@ -280,19 +318,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Shelters
-  shelters: mockShelters,
+  // Shelters — empty by default
+  shelters: [],
   fetchShelters: async () => {
-    set({ isLoading: true });
+    const loc = get().selectedLocation;
+    if (!loc) { set({ shelters: [] }); return; }
     try {
       const res = await api.get('/shelters');
-      const shelterList = res.data.shelters;
-      set({
-        shelters: shelterList.length > 0 ? shelterList : mockShelters,
-        isLoading: false
-      });
+      const shelterList = res.data.shelters || [];
+      set({ shelters: shelterList });
     } catch (err) {
-      set({ shelters: mockShelters, isLoading: false });
+      set({ shelters: [] });
     }
   },
 
@@ -309,19 +345,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Reports
-  reports: mockReports,
+  // Reports — still fetched globally (all user reports)
+  reports: [],
   fetchReports: async () => {
-    set({ isLoading: true });
     try {
       const res = await api.get('/reports');
-      const reportList = res.data.reports;
-      set({
-        reports: reportList.length > 0 ? reportList : mockReports,
-        isLoading: false
-      });
+      const reportList = res.data.reports || [];
+      set({ reports: reportList });
     } catch (err) {
-      set({ reports: mockReports, isLoading: false });
+      set({ reports: [] });
     }
   },
 
@@ -354,33 +386,37 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Weather
+  // Weather — null by default, fetched for selected location
   weather: null,
   fetchWeather: async () => {
+    const loc = get().selectedLocation;
+    if (!loc) { set({ weather: null }); return; }
     try {
-      const res = await api.get('/weather/current');
+      const res = await api.get(`/weather/current?lat=${loc.lat}&lng=${loc.lng}`);
       set({ weather: res.data });
     } catch {
-      set({ weather: mockWeatherData });
+      set({ weather: null });
     }
   },
 
   // Evacuation
-  evacuationRoutes: mockEvacuationRoutes,
+  evacuationRoutes: [],
   fetchEvacuationRoutes: async (lat?: number, lng?: number) => {
+    const loc = get().selectedLocation;
+    const current_lat = lat ?? loc?.lat ?? 0;
+    const current_lng = lng ?? loc?.lng ?? 0;
+    if (!current_lat || !current_lng) { set({ evacuationRoutes: [] }); return; }
     try {
-      const current_lat = lat ?? 10.7905;
-      const current_lng = lng ?? 78.7047;
       const res = await api.get(`/evacuation/routes?origin_lat=${current_lat}&origin_lng=${current_lng}`);
-      const routes = res.data.routes;
-      set({ evacuationRoutes: routes.length > 0 ? routes : mockEvacuationRoutes });
+      const routes = res.data.routes || [];
+      set({ evacuationRoutes: routes });
     } catch {
-      set({ evacuationRoutes: mockEvacuationRoutes });
+      set({ evacuationRoutes: [] });
     }
   },
 
-  // Stats
-  stats: mockDashboardStats,
+  // Stats — computed from current data
+  stats: { activeAlerts: 0, zonesAtRisk: 0, populationAffected: 0, sheltersActive: 0, citizenReports: 0, resourcesDeployed: 0, predictionsGenerated: 0, avgRiskScore: 0 },
   fetchStats: async () => {
     try {
       const preds = get().predictions;
@@ -393,7 +429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const populationAffected = preds.reduce((acc, p) => p.riskScore >= 60 ? acc + p.affectedPopulation : acc, 0);
       const sheltersActive = sheltersList.length;
       const citizenReports = reportsList.length;
-      const avgRiskScore = preds.length > 0 ? Math.round(preds.reduce((acc, p) => acc + p.riskScore, 0) / preds.length) : 50;
+      const avgRiskScore = preds.length > 0 ? Math.round(preds.reduce((acc, p) => acc + p.riskScore, 0) / preds.length) : 0;
 
       set({
         stats: {
@@ -402,18 +438,18 @@ export const useAppStore = create<AppState>((set, get) => ({
           populationAffected,
           sheltersActive,
           citizenReports,
-          resourcesDeployed: 89,
-          predictionsGenerated: 156,
+          resourcesDeployed: 0,
+          predictionsGenerated: preds.length,
           avgRiskScore
         }
       });
     } catch (err) {
-      set({ stats: mockDashboardStats });
+      // keep current stats
     }
   },
 
-  // Map
-  mapCenter: [20.5937, 78.9629], // India center — map auto-fits to actual data
+  // Map — starts at India center
+  mapCenter: [20.5937, 78.9629],
   mapZoom: 5,
   setMapView: (center, zoom) => set({ mapCenter: center, mapZoom: zoom }),
   activeMapLayers: ['risk-heatmap', 'flood-zones', 'shelters'],

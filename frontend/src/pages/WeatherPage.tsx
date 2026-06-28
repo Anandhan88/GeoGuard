@@ -11,19 +11,23 @@ import {
 import { api } from '../utils/api';
 import { mockWeatherData } from '../data/mockData';
 
+import { useAppStore } from '../stores/useAppStore';
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function WeatherPage() {
-  const [weather, setWeather] = useState<any>(mockWeatherData);
+  const { selectedLocation } = useAppStore();
+  const [weather, setWeather] = useState<any>(null);
   const [stations, setStations] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const fetchAll = async () => {
+    if (!selectedLocation) return;
     setLoading(true);
     try {
       const [wRes, sRes] = await Promise.all([
-        api.get('/weather/current'),
+        api.get(`/weather/current?lat=${selectedLocation.lat}&lng=${selectedLocation.lng}`),
         api.get('/weather/stations'),
       ]);
       setWeather(wRes.data);
@@ -37,12 +41,15 @@ export default function WeatherPage() {
   };
 
   useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    if (selectedLocation) {
+      fetchAll();
+    }
+  }, [selectedLocation]);
 
-  const hourlyData = weather.hourlyForecast || [
+  // Set default fallback if api returned null
+  const currentWeatherData = weather || mockWeatherData;
+
+  const hourlyData = currentWeatherData.hourlyForecast || [
     { time: '6AM', rainfall: 12, predicted: false },
     { time: '9AM', rainfall: 28, predicted: false },
     { time: '12PM', rainfall: 45, predicted: false },
@@ -53,7 +60,7 @@ export default function WeatherPage() {
     { time: '3AM', rainfall: 45, predicted: true },
   ];
 
-  const forecast = weather.forecast || mockWeatherData.forecast;
+  const forecast = currentWeatherData.forecast || mockWeatherData.forecast;
 
   return (
     <div className="space-y-6 max-w-[1200px]">
@@ -66,7 +73,7 @@ export default function WeatherPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
             <MapPin size={12} />
-            Chennai Metropolitan Area ·{' '}
+            {selectedLocation.name} ·{' '}
             {loading ? 'Updating...' : `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
           </p>
         </div>
@@ -77,14 +84,14 @@ export default function WeatherPage() {
       </div>
 
       {/* IMD Warning Banner */}
-      {weather.imdWarning && (
+      {currentWeatherData.imdWarning && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20"
         >
           <AlertTriangle size={18} className="text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-300">{weather.imdWarning}</p>
+          <p className="text-sm text-amber-300">{currentWeatherData.imdWarning}</p>
         </motion.div>
       )}
 
@@ -93,23 +100,23 @@ export default function WeatherPage() {
         {/* Current Conditions */}
         <div className="lg:col-span-1 glass-card-static p-6">
           <div className="text-center mb-6">
-            <span className="text-6xl">{weather.icon || '🌧️'}</span>
+            <span className="text-6xl">{currentWeatherData.icon || '🌧️'}</span>
             <div className="mt-3">
-              <p className="text-5xl font-black text-white">{weather.temperature}°<span className="text-2xl font-normal text-slate-400">C</span></p>
-              <p className="text-slate-400 mt-1 font-medium">{weather.condition}</p>
+              <p className="text-5xl font-black text-white">{currentWeatherData.temperature}°<span className="text-2xl font-normal text-slate-400">C</span></p>
+              <p className="text-slate-400 mt-1 font-medium">{currentWeatherData.condition}</p>
             </div>
             <div className="mt-2 text-xs text-slate-500">
-              Feels like {weather.feelsLike || Math.round(weather.temperature + 7)}°C
+              Feels like {currentWeatherData.feelsLike || Math.round(currentWeatherData.temperature + 7)}°C
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: Droplets, label: 'Rainfall', value: `${weather.rainfall} mm`, color: '#3b82f6' },
-              { icon: Wind, label: 'Wind', value: `${weather.windSpeed} km/h ${weather.windDirection || ''}`, color: '#06b6d4' },
-              { icon: Thermometer, label: 'Humidity', value: `${weather.humidity}%`, color: '#f59e0b' },
-              { icon: Activity, label: 'Pressure', value: `${weather.pressure} hPa`, color: '#8b5cf6' },
-              { icon: Eye, label: 'Visibility', value: `${weather.visibility || 5} km`, color: '#10b981' },
-              { icon: Zap, label: 'UV Index', value: `${weather.uvIndex || 2}`, color: '#ec4899' },
+              { icon: Droplets, label: 'Rainfall', value: `${currentWeatherData.rainfall} mm`, color: '#3b82f6' },
+              { icon: Wind, label: 'Wind', value: `${currentWeatherData.windSpeed} km/h ${currentWeatherData.windDirection || ''}`, color: '#06b6d4' },
+              { icon: Thermometer, label: 'Humidity', value: `${currentWeatherData.humidity}%`, color: '#f59e0b' },
+              { icon: Activity, label: 'Pressure', value: `${currentWeatherData.pressure} hPa`, color: '#8b5cf6' },
+              { icon: Eye, label: 'Visibility', value: `${currentWeatherData.visibility || 5} km`, color: '#10b981' },
+              { icon: Zap, label: 'UV Index', value: `${currentWeatherData.uvIndex || 2}`, color: '#ec4899' },
             ].map((m) => (
               <div key={m.label} className="flex items-center gap-2 p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
                 <m.icon size={14} style={{ color: m.color }} />

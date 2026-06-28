@@ -17,14 +17,53 @@ import {
 import { useAppStore } from '../../stores/useAppStore';
 import { getAlertSeverityColor, formatRelativeTime } from '../../utils/helpers';
 import { useTranslation } from '../../utils/translations';
+import { api } from '../../utils/api';
 
 export default function Navbar() {
   const { t, lang } = useTranslation();
-  const { toggleSidebar, alerts, unreadAlertCount, user, logout, setLanguage, updateProfile } = useAppStore();
+  const {
+    toggleSidebar,
+    alerts,
+    unreadAlertCount,
+    user,
+    logout,
+    setLanguage,
+    updateProfile,
+    selectedLocation,
+    setSelectedLocation,
+  } = useAppStore();
   const [showAlerts, setShowAlerts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const handleSearchChange = async (val: string) => {
+    setSearchQuery(val);
+    if (!val || val.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const res = await api.get(`/weather/search?query=${encodeURIComponent(val)}`);
+      setSuggestions(res.data || []);
+      setShowSuggestions(true);
+    } catch (e) {
+      console.error("Geocoding search failed:", e);
+    }
+  };
+
+  const handleSelectSuggestion = (suggestion: any) => {
+    setSelectedLocation({
+      name: suggestion.name,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+    });
+    setSearchQuery(suggestion.name.split(',')[0]);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
   
   // Profile settings modal states
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -80,18 +119,64 @@ export default function Navbar() {
         </div>
 
         {/* Center - Search */}
-        <div className="hidden lg:flex flex-1 max-w-md mx-8">
+        <div className="hidden lg:flex flex-1 max-w-md mx-8 relative">
           <div className="relative w-full">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
               placeholder={t('search_placeholder')}
-              className="input-field pl-10 pr-4 py-2 text-sm bg-white/5"
+              className="input-field pl-10 pr-10 py-2 text-sm bg-white/5 w-full"
               id="global-search"
+              autoComplete="off"
             />
+            {selectedLocation && (
+              <button
+                onClick={() => {
+                  setSelectedLocation(null);
+                  setSearchQuery('');
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
+
+          {/* Suggestions Dropdown */}
+          <AnimatePresence>
+            {showSuggestions && suggestions.length > 0 && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowSuggestions(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute left-0 right-0 top-full mt-2 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto"
+                >
+                  {suggestions.map((s, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSelectSuggestion(s)}
+                      className="w-full px-4 py-2.5 text-left text-xs text-slate-300 hover:bg-white/5 hover:text-white transition-colors border-b border-white/5 last:border-0 flex flex-col gap-0.5"
+                    >
+                      <span className="font-semibold text-slate-200">
+                        {s.name.split(',')[0]}
+                      </span>
+                      <span className="text-[10px] text-slate-500 truncate">
+                        {s.name}
+                      </span>
+                    </button>
+                  ))}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Right Section */}

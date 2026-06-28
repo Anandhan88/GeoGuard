@@ -18,15 +18,19 @@ const AMENITY_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function SheltersPage() {
-  const { shelters, fetchShelters, updateShelterOccupancy, isLoading } = useAppStore();
+  const { shelters, fetchShelters, updateShelterOccupancy, isLoading, selectedLocation } = useAppStore();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [selectedShelter, setSelectedShelter] = useState<any>(null);
 
   useEffect(() => {
-    fetchShelters();
-  }, []);
+    if (selectedLocation) {
+      fetchShelters();
+    }
+  }, [selectedLocation]);
+
+
 
   const filteredShelters = shelters.filter((s) => {
     const matchSearch =

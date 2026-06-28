@@ -287,14 +287,17 @@ function GoogleEvacuationRoutes({ routes, visible }: { routes: any[]; visible: b
 
 function GoogleAutoFitBounds({ points }: { points: { lat: number; lng: number }[] }) {
   const map = useGoogleMap();
-  const fitted = useRef(false);
+  const prevCount = useRef(0);
 
   useEffect(() => {
-    if (!map || points.length === 0 || fitted.current) return;
-    const bounds = new google.maps.LatLngBounds();
-    points.forEach((p) => bounds.extend(p));
-    map.fitBounds(bounds, 60);
-    fitted.current = true;
+    if (!map || points.length === 0) return;
+    // Re-fit when the number of points changes (initial load or data refresh)
+    if (points.length !== prevCount.current) {
+      const bounds = new google.maps.LatLngBounds();
+      points.forEach((p) => bounds.extend(p));
+      map.fitBounds(bounds, 60);
+      prevCount.current = points.length;
+    }
   }, [map, points]);
 
   return null;
@@ -704,6 +707,7 @@ export default function MapView() {
     activeMapLayers, toggleMapLayer,
     predictions, shelters, reports, evacuationRoutes,
     fetchPredictions, fetchShelters, fetchReports, fetchEvacuationRoutes,
+    selectedLocation
   } = useAppStore();
 
   const [selectedPrediction, setSelectedPrediction] = useState<any>(null);
@@ -719,20 +723,25 @@ export default function MapView() {
   const [searchedPredictData, setSearchedPredictData] = useState<any>(null);
 
   // Map settings
-  const [mapCenter, setMapCenter] = useState<[number, number]>([13.0827, 80.2707]);
-  const [mapZoom, setMapZoom] = useState<number>(12);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
+  const [mapZoom, setMapZoom] = useState<number>(5);
   const [mapProvider, setMapProvider] = useState<'leaflet' | 'google'>(
     GMAPS_API_KEY && GMAPS_API_KEY !== 'YOUR_API_KEY_HERE' ? 'google' : 'leaflet'
   );
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
 
   useEffect(() => {
-    fetchPredictions();
-    fetchShelters();
+    // Reports are global, so fetch on mount
     fetchReports();
-    fetchEvacuationRoutes();
-    fetchHeatmap();
-  }, []);
+    if (selectedLocation) {
+      fetchPredictions();
+      fetchShelters();
+      fetchEvacuationRoutes(selectedLocation.lat, selectedLocation.lng);
+      fetchHeatmap();
+      setMapCenter([selectedLocation.lat, selectedLocation.lng]);
+      setMapZoom(12);
+    }
+  }, [selectedLocation]);
 
   async function fetchHeatmap() {
     try {
@@ -763,12 +772,12 @@ export default function MapView() {
         }
       },
       () => {
-        // Fallback to Chennai
-        setMapCenter([13.0827, 80.2707]);
-        setMapZoom(12);
+        // Fallback to Tamil Nadu overview
+        setMapCenter([10.8, 78.7]);
+        setMapZoom(7);
         if (mapRef) {
-          mapRef.panTo({ lat: 13.0827, lng: 80.2707 });
-          mapRef.setZoom(12);
+          mapRef.panTo({ lat: 10.8, lng: 78.7 });
+          mapRef.setZoom(7);
         }
       }
     );

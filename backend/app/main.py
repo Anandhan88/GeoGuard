@@ -1,9 +1,11 @@
 """
 GeoGuard AI - FastAPI Main Application
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import json
 import os
@@ -84,10 +86,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# Custom middleware to handle OPTIONS preflight requests that may arrive
+# without a proper Origin header (some browsers/extensions do this).
+class CORSPreflightMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "OPTIONS":
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, X-Requested-With",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Max-Age": "600",
+                },
+            )
+        return await call_next(request)
+
+# CORS — the preflight middleware must be added AFTER CORSMiddleware
+# (middleware executes in reverse order, so this runs first)
+app.add_middleware(CORSPreflightMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

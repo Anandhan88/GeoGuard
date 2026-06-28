@@ -16,14 +16,18 @@ const RISK_GRADIENT: Record<string, string> = {
 };
 
 export default function EvacuationPage() {
-  const { predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes } = useAppStore();
+  const { predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes, selectedLocation } = useAppStore();
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPredictions();
-    fetchShelters();
-    fetchEvacuationRoutes();
-  }, []);
+    if (selectedLocation) {
+      fetchPredictions();
+      fetchShelters();
+      fetchEvacuationRoutes(selectedLocation.lat, selectedLocation.lng);
+    }
+  }, [selectedLocation]);
+
+
 
   const criticalPredictions = predictions
     .filter((p) => p.riskScore >= 60)
