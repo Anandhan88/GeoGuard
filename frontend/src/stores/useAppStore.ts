@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import type { User, Alert, FloodPrediction, Shelter, CitizenReport, DashboardStats, WeatherData, EvacuationRoute } from '../types';
-import { mockDashboardStats } from '../data/mockData';
+import type { User, Alert, FloodPrediction, Shelter, CitizenReport, DashboardStats, WeatherData, EvacuationRoute, SatelliteImage, SatelliteStatus } from '../types';
 import { api } from '../utils/api';
 
 interface SelectedLocation {
@@ -82,6 +81,13 @@ interface AppState {
   // UI
   showXAIPanel: boolean;
   toggleXAIPanel: () => void;
+
+  // Satellite
+  satelliteImages: SatelliteImage[];
+  satelliteStatus: SatelliteStatus | null;
+  fetchSatelliteImages: () => Promise<void>;
+  fetchSatelliteStatus: () => Promise<void>;
+  triggerSatelliteAnalysis: (lat: number, lng: number) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -245,6 +251,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().fetchShelters(),
       get().fetchReports(),
       get().fetchEvacuationRoutes(loc.lat, loc.lng),
+      get().fetchSatelliteImages(),
+      get().fetchSatelliteStatus(),
     ]);
     await get().fetchStats();
     set({ isLoading: false });
@@ -463,4 +471,40 @@ export const useAppStore = create<AppState>((set, get) => ({
   // UI
   showXAIPanel: false,
   toggleXAIPanel: () => set((s) => ({ showXAIPanel: !s.showXAIPanel })),
+
+  // Satellite Initial State & Actions
+  satelliteImages: [],
+  satelliteStatus: null,
+
+  fetchSatelliteImages: async () => {
+    try {
+      const res = await api.get('/satellite');
+      set({ satelliteImages: res.data || [] });
+    } catch (err) {
+      console.error("Failed to fetch satellite images", err);
+      set({ satelliteImages: [] });
+    }
+  },
+
+  fetchSatelliteStatus: async () => {
+    try {
+      const res = await api.get('/satellite/status');
+      set({ satelliteStatus: res.data });
+    } catch (err) {
+      console.error("Failed to fetch satellite status", err);
+    }
+  },
+
+  triggerSatelliteAnalysis: async (lat, lng) => {
+    set({ isLoading: true, error: null });
+    try {
+      await api.post(`/satellite/trigger?lat=${lat}&lng=${lng}`);
+      set({ isLoading: false });
+      await get().fetchSatelliteStatus();
+    } catch (err: any) {
+      const errMsg = err.response?.data?.detail || 'Failed to trigger satellite analysis';
+      set({ error: errMsg, isLoading: false });
+      throw new Error(errMsg);
+    }
+  },
 }));

@@ -5,7 +5,7 @@ Seeds users, risk zones, predictions, alerts, shelters, and reports.
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.models import User, RiskZone, FloodPrediction, Alert, Shelter, CitizenReport
+from app.models.models import User, RiskZone, FloodPrediction, Alert, Shelter, CitizenReport, SatelliteImage
 from app.core.security import hash_password
 
 
@@ -240,5 +240,75 @@ async def seed_all(db: AsyncSession):
                 }
                 r.latitude, r.longitude = coords[r.id]
             db.add(r)
+
+    # 7. Seed Satellite Images
+    result = await db.execute(select(SatelliteImage))
+    if not result.scalars().first():
+        river_coords = [
+            [80.2207, 13.0727], [80.2307, 13.0747], [80.2407, 13.0707], [80.2507, 13.0757],
+            [80.2607, 13.0727], [80.2707, 13.0737], [80.2807, 13.0717], [80.2907, 13.0767],
+            [80.2907, 13.0807], [80.2807, 13.0757], [80.2707, 13.0777], [80.2607, 13.0767],
+            [80.2507, 13.0797], [80.2407, 13.0747], [80.2307, 13.0787], [80.2207, 13.0727]
+        ]
+        pool_coords = [
+            [80.2657, 13.0857], [80.2707, 13.0897], [80.2757, 13.0857], [80.2707, 13.0817], [80.2657, 13.0857]
+        ]
+        sat_images = [
+            SatelliteImage(
+                id="sat-001",
+                source="Sentinel-2",
+                capture_date=datetime.utcnow() - timedelta(days=1),
+                image_url="http://localhost:8000/uploads/satellite/sentinel2_chennai_post_rain.tif",
+                analysis_result_json={
+                    "flooded_area_km": 14.8,
+                    "water_spread_pct": 34.0,
+                    "severity": "Critical",
+                    "risk_level": "Critical",
+                    "ndwi_score": 0.82,
+                    "coverage_pct": 94,
+                    "anomaly_detected": True,
+                    "analysis": "Large-scale inundation detected in Adyar river floodplain. Water body extent has expanded by 340% compared to baseline. U-Net model confidence: 94%. Immediate action recommended.",
+                    "polygons": [
+                        {
+                            "type": "Feature",
+                            "properties": {"id": "river-flood-corridor", "type": "river_overflow", "severity": "Critical"},
+                            "geometry": {"type": "Polygon", "coordinates": [river_coords]}
+                        },
+                        {
+                            "type": "Feature",
+                            "properties": {"id": "flood-patch-1", "type": "urban_inundation", "severity": "High"},
+                            "geometry": {"type": "Polygon", "coordinates": [pool_coords]}
+                        }
+                    ]
+                },
+                bounds_json={"type": "Polygon", "coordinates": []}
+            ),
+            SatelliteImage(
+                id="sat-002",
+                source="Landsat-9",
+                capture_date=datetime.utcnow() - timedelta(days=2),
+                image_url="http://localhost:8000/uploads/satellite/landsat9_velachery_overflow.tif",
+                analysis_result_json={
+                    "flooded_area_km": 8.2,
+                    "water_spread_pct": 21.0,
+                    "severity": "High",
+                    "risk_level": "High",
+                    "ndwi_score": 0.71,
+                    "coverage_pct": 89,
+                    "anomaly_detected": True,
+                    "analysis": "Velachery lake overflow extending into residential areas. Pallikaranai marshland at 85% saturation. Road network disruption visible in SE quadrant.",
+                    "polygons": [
+                        {
+                            "type": "Feature",
+                            "properties": {"id": "flood-patch-2", "type": "urban_inundation", "severity": "High"},
+                            "geometry": {"type": "Polygon", "coordinates": [pool_coords]}
+                        }
+                    ]
+                },
+                bounds_json={"type": "Polygon", "coordinates": []}
+            )
+        ]
+        for img in sat_images:
+            db.add(img)
 
     await db.commit()

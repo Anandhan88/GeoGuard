@@ -221,3 +221,16 @@ class ZoneImpactDetail(BaseModel):
     schools_affected: int
     hospitals_affected: int
     infrastructure_damage_score: float
+
+
+class SatelliteImageResponse(BaseModel):
+    id: str
+    source: str
+    capture_date: datetime
+    analysis_result_json: Optional[Dict[str, Any]] = None
+    image_url: str
+    bounds_json: Optional[Dict[str, Any]] = None
+
+    class Config:
+        from_attributes = True
+

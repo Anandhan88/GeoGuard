@@ -73,7 +73,7 @@ export default function WeatherPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
             <MapPin size={12} />
-            {selectedLocation.name} ·{' '}
+            {selectedLocation?.name} ·{' '}
             {loading ? 'Updating...' : `Updated ${lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
           </p>
         </div>

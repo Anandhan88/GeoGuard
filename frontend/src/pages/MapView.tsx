@@ -8,6 +8,7 @@ import {
   Polyline as LeafletPolyline,
   Circle as LeafletCircle,
   useMap as useLeafletMap,
+  useMapEvents as useLeafletMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
 import {
@@ -22,7 +23,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layers, Eye, EyeOff, Navigation, Building, MapPin,
   Droplets, Users, Clock, X, Maximize2, Minimize2,
-  Activity, Zap, RefreshCw, Search, LocateFixed,
+  Activity, Zap, RefreshCw, Search, LocateFixed, Satellite,
+  Shield, AlertTriangle,
 } from 'lucide-react';
 import { getRiskColor, getRiskBadgeClass, formatNumber } from '../utils/helpers';
 import { useAppStore } from '../stores/useAppStore';
@@ -36,6 +38,16 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
   useEffect(() => {
     map.setView(center, zoom);
   }, [center, zoom, map]);
+  return null;
+}
+
+// ─── Custom Leaflet Click Event Listener ──────────────────────────────────────
+function LeafletMapEventsHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
+  useLeafletMapEvents({
+    click(e) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    }
+  });
   return null;
 }
 
@@ -555,6 +567,7 @@ function MapLegend({
 }) {
   const allLayers = [
     { key: 'flood-zones',  label: 'Flood Zones',       icon: Droplets,   color: '#ef4444' },
+    { key: 'satellite-flood', label: 'Satellite Flood Mask', icon: Satellite, color: '#c084fc' },
     { key: 'shelters',     label: 'Shelters',           icon: Building,   color: '#10b981' },
     { key: 'reports',      label: 'Citizen Reports',    icon: MapPin,     color: '#f59e0b' },
     { key: 'evacuation',   label: 'Evacuation Routes',  icon: Navigation, color: '#06b6d4' },
@@ -711,12 +724,100 @@ export default function MapView() {
   } = useAppStore();
 
   const [selectedPrediction, setSelectedPrediction] = useState<any>(null);
+  const user = useAppStore((s) => s.user);
+
+  // Placement Mode
+  const [placementMode, setPlacementMode] = useState<'shelter' | 'zone' | null>(null);
+  const [placementCoords, setPlacementCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [showShelterModal, setShowShelterModal] = useState(false);
+  const [showZoneModal, setShowZoneModal] = useState(false);
+
+  // Forms
+  const [shelterForm, setShelterForm] = useState({
+    name: '',
+    type: 'community_hall',
+    capacity: 500,
+    address: '',
+    amenities: [] as string[]
+  });
+
+  const [zoneForm, setZoneForm] = useState({
+    name: '',
+    riskLevel: 'critical',
+    population: 5000,
+    riskScore: 75,
+    predictedDepth: 1.5,
+    vulnerabilityScore: 70
+  });
+
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (!placementMode) return;
+    setPlacementCoords({ lat, lng });
+    if (placementMode === 'shelter') {
+      setShelterForm(f => ({ ...f, address: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }));
+      setShowShelterModal(true);
+    } else if (placementMode === 'zone') {
+      setShowZoneModal(true);
+    }
+  }, [placementMode]);
+
+  const handleCreateShelter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!placementCoords) return;
+    try {
+      await api.post('/shelters', {
+        name: shelterForm.name,
+        type: shelterForm.type,
+        capacity: Number(shelterForm.capacity),
+        latitude: placementCoords.lat,
+        longitude: placementCoords.lng,
+        address: shelterForm.address,
+        amenities: shelterForm.amenities
+      });
+      fetchShelters();
+      useAppStore.getState().fetchStats();
+      setShowShelterModal(false);
+      setPlacementMode(null);
+      setPlacementCoords(null);
+      setShelterForm({ name: '', type: 'community_hall', capacity: 500, address: '', amenities: [] });
+    } catch (err) {
+      console.error("Failed to create shelter", err);
+    }
+  };
+
+  const handleCreateZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!placementCoords) return;
+    try {
+      await api.post('/predictions/zone', {
+        name: zoneForm.name,
+        risk_level: zoneForm.riskLevel,
+        population: Number(zoneForm.population),
+        latitude: placementCoords.lat,
+        longitude: placementCoords.lng,
+        risk_score: Number(zoneForm.riskScore),
+        predicted_depth: Number(zoneForm.predictedDepth),
+        vulnerability_score: Number(zoneForm.vulnerabilityScore)
+      });
+      fetchPredictions();
+      useAppStore.getState().fetchStats();
+      setShowZoneModal(false);
+      setPlacementMode(null);
+      setPlacementCoords(null);
+      setZoneForm({ name: '', riskLevel: 'critical', population: 5000, riskScore: 75, predictedDepth: 1.5, vulnerabilityScore: 70 });
+    } catch (err) {
+      console.error("Failed to create risk zone", err);
+    }
+  };
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [heatmapPoints, setHeatmapPoints] = useState<{ lat: number; lng: number; intensity: number }[]>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [searchMarker, setSearchMarker] = useState<{ lat: number; lng: number; name: string } | null>(null);
   
+  // Satellite flood mask state
+  const [satellitePolygons, setSatellitePolygons] = useState<any[]>([]);
+
   // Dynamic search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
@@ -738,10 +839,22 @@ export default function MapView() {
       fetchShelters();
       fetchEvacuationRoutes(selectedLocation.lat, selectedLocation.lng);
       fetchHeatmap();
+      fetchSatelliteFloodMap();
       setMapCenter([selectedLocation.lat, selectedLocation.lng]);
       setMapZoom(12);
     }
   }, [selectedLocation]);
+
+  async function fetchSatelliteFloodMap() {
+    try {
+      const res = await api.get('/satellite/flood-map');
+      if (res.data?.features) {
+        setSatellitePolygons(res.data.features);
+      }
+    } catch (e) {
+      console.error("Failed to fetch satellite flood map:", e);
+    }
+  }
 
   async function fetchHeatmap() {
     try {
@@ -754,7 +867,14 @@ export default function MapView() {
 
   async function handleRefresh() {
     setIsRefreshing(true);
-    await Promise.all([fetchPredictions(), fetchShelters(), fetchReports(), fetchEvacuationRoutes(), fetchHeatmap()]);
+    await Promise.all([
+      fetchPredictions(),
+      fetchShelters(),
+      fetchReports(),
+      fetchEvacuationRoutes(),
+      fetchHeatmap(),
+      fetchSatelliteFloodMap()
+    ]);
     setIsRefreshing(false);
   }
 
@@ -876,6 +996,7 @@ export default function MapView() {
           />
 
           <MapController center={mapCenter} zoom={mapZoom} />
+          <LeafletMapEventsHandler onMapClick={handleMapClick} />
 
           {/* User Location */}
           {userLocation && (
@@ -919,6 +1040,28 @@ export default function MapView() {
                   }}
                 />
               );
+            })}
+
+          {/* Satellite Flood Polygons */}
+          {activeMapLayers.includes('satellite-flood') &&
+            satellitePolygons.map((feature, idx) => {
+              const geometry = feature.geometry;
+              if (geometry.type === 'Polygon') {
+                const positions = geometry.coordinates[0].map((coord: any) => [coord[1], coord[0]]);
+                return (
+                  <LeafletPolygon
+                    key={`sat-flood-${idx}`}
+                    positions={positions}
+                    pathOptions={{
+                      color: '#c084fc',
+                      fillColor: '#c084fc',
+                      fillOpacity: 0.35,
+                      weight: 2,
+                    }}
+                  />
+                );
+              }
+              return null;
             })}
 
           {/* Heatmap Circles */}
@@ -1059,6 +1202,11 @@ export default function MapView() {
             styles={DARK_STYLE}
             style={{ width: '100%', height: '100%' }}
             onIdle={(e) => setMapRef(e.map)}
+            onClick={(e) => {
+              if (placementMode && e.detail.latLng) {
+                handleMapClick(e.detail.latLng.lat, e.detail.latLng.lng);
+              }
+            }}
           >
             <GoogleMapContent
               activeMapLayers={activeMapLayers}
@@ -1196,6 +1344,307 @@ export default function MapView() {
             : <Maximize2 size={16} className="text-slate-400" />}
         </button>
       </div>
+
+      {/* Placement Mode Instruction Banner */}
+      {placementMode && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-indigo-600/90 text-white backdrop-blur-md px-4 py-2 rounded-full border border-indigo-400/20 text-xs font-bold shadow-2xl flex items-center gap-2 animate-pulse">
+          <MapPin size={14} className="text-white" />
+          <span>PLACEMENT MODE: Click on the map to place a {placementMode === 'shelter' ? 'Relief Shelter' : 'Risk Zone'}</span>
+        </div>
+      )}
+
+      {/* Authority Control Panel Overlay */}
+      {(user?.role === 'authority' || user?.role === 'admin') && (
+        <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2">
+          <div className="glass-card-static p-4 min-w-[220px]">
+            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/5">
+              <Shield size={16} className="text-red-400" />
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Authority Tools</span>
+            </div>
+            
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  if (placementMode === 'shelter') {
+                    setPlacementMode(null);
+                  } else {
+                    setPlacementMode('shelter');
+                  }
+                }}
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  placementMode === 'shelter'
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-500/10'
+                    : 'bg-white/5 border-transparent text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Building size={14} className={placementMode === 'shelter' ? 'animate-bounce' : ''} />
+                <span>Place Relief Shelter</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (placementMode === 'zone') {
+                    setPlacementMode(null);
+                  } else {
+                    setPlacementMode('zone');
+                  }
+                }}
+                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-semibold transition-all border ${
+                  placementMode === 'zone'
+                    ? 'bg-red-500/20 border-red-500 text-red-400 shadow-lg shadow-red-500/10'
+                    : 'bg-white/5 border-transparent text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <AlertTriangle size={14} className={placementMode === 'zone' ? 'animate-bounce' : ''} />
+                <span>Define Risk Zone</span>
+              </button>
+
+              {placementMode && (
+                <button
+                  onClick={() => {
+                    setPlacementMode(null);
+                    setPlacementCoords(null);
+                  }}
+                  className="w-full text-center px-3 py-1.5 rounded-lg text-[10px] bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancel Placement
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Shelter Placement Modal Form */}
+      {showShelterModal && placementCoords && (
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-md glass-card-static border border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Building className="text-emerald-400" size={18} />
+                Place Relief Shelter
+              </h2>
+              <button
+                onClick={() => { setShowShelterModal(false); setPlacementMode(null); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateShelter} className="p-5 space-y-4">
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Shelter Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Adyar Relief Center"
+                  value={shelterForm.name}
+                  onChange={(e) => setShelterForm(s => ({ ...s, name: e.target.value }))}
+                  className="input-field text-xs py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Shelter Type</label>
+                  <select
+                    value={shelterForm.type}
+                    onChange={(e) => setShelterForm(s => ({ ...s, type: e.target.value }))}
+                    className="input-field text-xs py-2 bg-slate-900 border border-white/10"
+                  >
+                    <option value="government">Government</option>
+                    <option value="school">School</option>
+                    <option value="stadium">Stadium</option>
+                    <option value="community_hall">Community Hall</option>
+                    <option value="temple">Temple</option>
+                    <option value="temporary">Temporary</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Total Capacity</label>
+                  <input
+                    type="number"
+                    required
+                    min={10}
+                    max={10000}
+                    value={shelterForm.capacity}
+                    onChange={(e) => setShelterForm(s => ({ ...s, capacity: Number(e.target.value) }))}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Address</label>
+                <input
+                  type="text"
+                  required
+                  value={shelterForm.address}
+                  onChange={(e) => setShelterForm(s => ({ ...s, address: e.target.value }))}
+                  className="input-field text-xs py-2"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2 block">Amenities</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Food', 'Water', 'Medical Aid', 'Blankets', 'Charging Points', 'Toilets'].map((item) => (
+                    <label key={item} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={shelterForm.amenities.includes(item)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setShelterForm(s => ({ ...s, amenities: [...s.amenities, item] }));
+                          } else {
+                            setShelterForm(s => ({ ...s, amenities: s.amenities.filter(a => a !== item) }));
+                          }
+                        }}
+                        className="rounded border-white/10 bg-white/5 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+                      />
+                      <span>{item}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowShelterModal(false); setPlacementMode(null); }}
+                  className="btn-secondary flex-1 justify-center py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex-1 justify-center py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-bold"
+                >
+                  Save Shelter
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Risk Zone Placement Modal Form */}
+      {showZoneModal && placementCoords && (
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-md glass-card-static border border-white/10 shadow-2xl rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="text-red-400 animate-pulse" size={18} />
+                Define Critical Risk Zone
+              </h2>
+              <button
+                onClick={() => { setShowZoneModal(false); setPlacementMode(null); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreateZone} className="p-5 space-y-4">
+              <div>
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Zone Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Adyar Sector 4"
+                  value={zoneForm.name}
+                  onChange={(e) => setZoneForm(z => ({ ...z, name: e.target.value }))}
+                  className="input-field text-xs py-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Risk Level</label>
+                  <select
+                    value={zoneForm.riskLevel}
+                    onChange={(e) => setZoneForm(z => ({ ...z, riskLevel: e.target.value }))}
+                    className="input-field text-xs py-2 bg-slate-900 border border-white/10"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Risk Score (0-100)</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={100}
+                    value={zoneForm.riskScore}
+                    onChange={(e) => setZoneForm(z => ({ ...z, riskScore: Number(e.target.value) }))}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Population</label>
+                  <input
+                    type="number"
+                    required
+                    min={100}
+                    value={zoneForm.population}
+                    onChange={(e) => setZoneForm(z => ({ ...z, population: Number(e.target.value) }))}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Flood Depth (m)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    min={0.1}
+                    max={10.0}
+                    value={zoneForm.predictedDepth}
+                    onChange={(e) => setZoneForm(z => ({ ...z, predictedDepth: Number(e.target.value) }))}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1 block">Vuln. (0-100)</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    max={100}
+                    value={zoneForm.vulnerabilityScore}
+                    onChange={(e) => setZoneForm(z => ({ ...z, vulnerabilityScore: Number(e.target.value) }))}
+                    className="input-field text-xs py-2"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowZoneModal(false); setPlacementMode(null); }}
+                  className="btn-secondary flex-1 justify-center py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary flex-1 justify-center py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white font-bold"
+                >
+                  Mark Zone
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

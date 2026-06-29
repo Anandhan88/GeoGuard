@@ -11,7 +11,7 @@ import json
 import os
 
 from app.core.config import settings
-from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact, weather, chat
+from app.api.v1 import auth, predictions, alerts, reports, shelters, evacuation, impact, weather, chat, satellite
 from app.core.database import init_db
 
 
@@ -68,6 +68,15 @@ async def lifespan(app: FastAPI):
     from app.core.database import async_session_maker
     app.state.weather_task = asyncio.create_task(start_weather_updater(async_session_maker))
     
+    # Start Copernicus Satellite background worker
+    try:
+        from services.satellite import satellite_manager
+        satellite_manager.start_auto_update_job()
+        satellite_manager.trigger_manual_run()
+        print("Copernicus Satellite background worker launched.")
+    except Exception as e:
+        print(f"Failed to start Copernicus background worker: {e}")
+        
     yield
     
     # Shutdown
@@ -127,6 +136,7 @@ app.include_router(evacuation.router, prefix=f"{settings.API_PREFIX}/evacuation"
 app.include_router(impact.router, prefix=f"{settings.API_PREFIX}/impact", tags=["Impact Assessment"])
 app.include_router(weather.router, prefix=f"{settings.API_PREFIX}/weather", tags=["Weather"])
 app.include_router(chat.router, prefix=f"{settings.API_PREFIX}/chat", tags=["AI Chatbot"])
+app.include_router(satellite.router, prefix=f"{settings.API_PREFIX}/satellite", tags=["Satellite Imagery"])
 
 
 # WebSocket endpoint for real-time alerts

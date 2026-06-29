@@ -14,7 +14,9 @@ import {
   Activity,
   Shield,
   Clock,
+  Satellite,
 } from 'lucide-react';
+import axios from 'axios';
 import { useAppStore } from '../stores/useAppStore';
 import { mockWeatherData } from '../data/mockData';
 import { useTranslation } from '../utils/translations';
@@ -115,6 +117,8 @@ export default function CitizenDashboard() {
     selectedLocation
   } = useAppStore();
 
+  const [satStatus, setSatStatus] = useState<any>(null);
+
   useEffect(() => {
     // Reports are global, so fetch them on mount
     fetchReports();
@@ -124,8 +128,25 @@ export default function CitizenDashboard() {
       fetchShelters();
       fetchStats();
       fetchWeather();
+      fetchSatelliteInfo();
     }
   }, [selectedLocation]);
+
+  const fetchSatelliteInfo = async () => {
+    try {
+      const satRes = await axios.get('/api/satellite/latest');
+      if (satRes.data?.data) setSatStatus(satRes.data.data);
+    } catch (e) {
+      console.error("Failed to load satellite dashboard data:", e);
+    }
+  };
+
+  const SEVERITY_COLOR: Record<string, string> = {
+    Critical: '#ef4444',
+    High: '#f59e0b',
+    Moderate: '#06b6d4',
+    Low: '#10b981',
+  };
 
   const weather = liveWeather || mockWeatherData;
   const chartData = weather.hourlyForecast?.map((h: any) => ({
@@ -188,6 +209,46 @@ export default function CitizenDashboard() {
           <Link to="/app/alerts" className="btn-secondary text-xs py-1.5 px-3 shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10">
             {t('view_details')}
           </Link>
+        </motion.div>
+      )}
+
+      {/* Copernicus Space Intelligence Banner */}
+      {satStatus && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-xl bg-purple-950/20 border border-purple-500/15"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
+              <Satellite size={18} />
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Copernicus Status</p>
+              <p className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${satStatus.status === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                {satStatus.status}
+              </p>
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Last Scene Acquisition</p>
+            <p className="text-xs font-semibold text-slate-300 mt-0.5">
+              {satStatus.acquisition_time ? new Date(satStatus.acquisition_time).toLocaleString() : 'N/A'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Flooded Area (SAR)</p>
+            <p className="text-xs font-bold text-blue-400 mt-0.5">
+              {satStatus.flooded_area_km} km²
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Calculated Severity</p>
+            <p className="text-xs font-bold capitalize mt-0.5" style={{ color: SEVERITY_COLOR[satStatus.severity] || '#fff' }}>
+              {satStatus.severity} Risk
+            </p>
+          </div>
         </motion.div>
       )}
 

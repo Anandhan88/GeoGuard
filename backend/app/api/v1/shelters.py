@@ -2,13 +2,15 @@
 GeoGuard AI - Shelters API
 """
 from fastapi import APIRouter, Query, Depends, HTTPException
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 import math
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.models import Shelter
+from app.schemas import ShelterResponse
 
 router = APIRouter()
 
@@ -194,3 +196,35 @@ async def update_occupancy(
             "isOpen": True
         }
     }
+
+
+class ShelterCreateRequest(BaseModel):
+    name: str
+    type: str
+    capacity: int
+    latitude: float
+    longitude: float
+    address: str
+    amenities: List[str] = []
+
+
+@router.post("/", response_model=ShelterResponse)
+async def create_shelter(
+    request: ShelterCreateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new emergency shelter."""
+    new_shelter = Shelter(
+        name=request.name,
+        type=request.type,
+        capacity=request.capacity,
+        current_occupancy=0,
+        latitude=request.latitude,
+        longitude=request.longitude,
+        address=request.address,
+        amenities_json=request.amenities
+    )
+    db.add(new_shelter)
+    await db.commit()
+    await db.refresh(new_shelter)
+    return new_shelter

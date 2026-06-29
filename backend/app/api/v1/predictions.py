@@ -5,6 +5,9 @@ Serves flood risk predictions with XAI explanations using the database.
 from fastapi import APIRouter, Query, Depends
 from typing import Optional, List, Dict, Any
 import random
+import uuid
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -46,6 +49,22 @@ async def list_predictions(
     response = []
     for pred in predictions:
         affected_pop = int(pred.zone.population * (pred.risk_score / 100))
+        
+        # Calculate dynamic center from boundary if not in cached centers
+        center = ZONE_CENTERS.get(pred.zone_id)
+        if not center:
+            try:
+                if pred.zone.boundary_json and pred.zone.boundary_json.get("type") == "Polygon":
+                    coords = pred.zone.boundary_json.get("coordinates", [])
+                    if coords and len(coords[0]) > 0:
+                        lats = [c[0] for c in coords[0]]
+                        lngs = [c[1] for c in coords[0]]
+                        center = {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)}
+            except Exception:
+                pass
+            if not center:
+                center = {"lat": 13.0500, "lng": 80.2200}
+                
         response.append({
             "id": pred.id,
             "zoneId": pred.zone_id,
@@ -59,7 +78,7 @@ async def list_predictions(
             "affectedPopulation": affected_pop,
             "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
             "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
-            "center": ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200}),
+            "center": center,
             "factors": pred.factors_json or []
         })
         
@@ -189,6 +208,22 @@ async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db))
     explanation += f"Model confidence is {int(pred.confidence * 100)}% based on 847 similar historical events."
     
     affected_pop = int(pred.zone.population * (pred.risk_score / 100))
+    
+    # Calculate dynamic center from boundary if not in cached centers
+    center = ZONE_CENTERS.get(pred.zone_id)
+    if not center:
+        try:
+            if pred.zone.boundary_json and pred.zone.boundary_json.get("type") == "Polygon":
+                coords = pred.zone.boundary_json.get("coordinates", [])
+                if coords and len(coords[0]) > 0:
+                    lats = [c[0] for c in coords[0]]
+                    lngs = [c[1] for c in coords[0]]
+                    center = {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)}
+        except Exception:
+            pass
+        if not center:
+            center = {"lat": 13.0500, "lng": 80.2200}
+
     return {
         "id": pred.id,
         "zoneId": pred.zone_id,
@@ -202,7 +237,7 @@ async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db))
         "affectedPopulation": affected_pop,
         "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
         "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
-        "center": ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200}),
+        "center": center,
         "factors": factors,
         "xai_explanation": explanation,
         "model_info": {
@@ -349,4 +384,77 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
         "status": "success",
         "message": f"Successfully ran predictions pipeline. Updated {len(predictions_generated)} zones.",
         "predictions": predictions_generated
+    }
+
+
+class RiskZoneCreateRequest(BaseModel):
+    name: str
+    risk_level: str  # low, medium, high, critical
+    population: int
+    latitude: float
+    longitude: float
+    vulnerability_score: float = 50.0
+    predicted_depth: float = 1.0
+    predicted_duration: float = 24.0
+    risk_score: float = 50.0
+
+
+@router.post("/zone")
+async def create_risk_zone(
+    request: RiskZoneCreateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a custom risk zone and matching flood prediction (authority only)."""
+    # 1. Create RiskZone
+    zone_id = f"zone-{str(uuid.uuid4())[:8]}"
+    half = 0.015
+    boundary = {
+        "type": "Polygon",
+        "coordinates": [[
+            [request.latitude - half, request.longitude - half],
+            [request.latitude - half, request.longitude + half],
+            [request.latitude + half, request.longitude + half],
+            [request.latitude + half, request.longitude - half],
+            [request.latitude - half, request.longitude - half]
+        ]]
+    }
+    
+    new_zone = RiskZone(
+        id=zone_id,
+        name=request.name,
+        risk_level=request.risk_level,
+        population=request.population,
+        vulnerability_score=request.vulnerability_score,
+        boundary_json=boundary
+    )
+    db.add(new_zone)
+    
+    # 2. Create FloodPrediction
+    factors = [
+        {"name": "Elevation Risk", "value": 2.5, "unit": "m ASL", "contribution": 35, "trend": "stable", "threshold": 5.0, "description": "Low-lying area marked by authority"},
+        {"name": "Authority Override", "value": 1.0, "unit": "status", "contribution": 65, "trend": "increasing", "threshold": 0.5, "description": f"Zone marked as {request.risk_level} risk by command center"}
+    ]
+    
+    new_pred = FloodPrediction(
+        id=f"pred-{str(uuid.uuid4())[:8]}",
+        zone_id=zone_id,
+        risk_score=request.risk_score,
+        probability=request.risk_score / 100.0,
+        confidence=0.95,
+        factors_json=factors,
+        predicted_depth=request.predicted_depth,
+        predicted_duration=request.predicted_duration,
+        predicted_for=datetime.utcnow() + timedelta(days=1),
+        generated_at=datetime.utcnow()
+    )
+    db.add(new_pred)
+    await db.commit()
+    
+    # Cache the center coordinate mapping in memory
+    ZONE_CENTERS[zone_id] = {"lat": request.latitude, "lng": request.longitude}
+    
+    return {
+        "status": "success",
+        "zone_id": zone_id,
+        "message": f"Successfully created custom risk zone '{request.name}'."
     }

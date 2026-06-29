@@ -225,3 +225,40 @@ export interface ChatMessage {
   timestamp: string;
   language: 'en' | 'ta' | 'hi';
 }
+
+
+// ===== Satellite Imagery =====
+
+export interface SatelliteImage {
+  id: string;
+  source: string;
+  capture_date: string;
+  image_url: string;
+  analysis_result_json: {
+    flooded_area_km: number;
+    water_spread_pct: number;
+    severity: string;
+    risk_level: string;
+    ndwi_score: number;
+    coverage_pct: number;
+    anomaly_detected: boolean;
+    analysis: string;
+    polygons: any[];
+  };
+  bounds_json?: any;
+}
+
+export interface SatelliteStatus {
+  status: 'Idle' | 'Searching' | 'Downloading' | 'Processing' | 'Completed' | 'Failed';
+  download_status: 'Idle' | 'Downloading' | 'Completed' | 'Failed';
+  processing_status: 'Idle' | 'Processing' | 'Completed' | 'Failed';
+  progress: number;
+  satellite_name: string;
+  product_id: string | null;
+  product_name: string | null;
+  acquisition_time: string | null;
+  last_update: string | null;
+  file_path: string | null;
+  error_message: string | null;
+}
+

@@ -22,4 +22,5 @@ from app.schemas.schemas import (
     EvacuationRouteResponse,
     ImpactSummaryResponse,
     ZoneImpactDetail,
+    SatelliteImageResponse,
 )
