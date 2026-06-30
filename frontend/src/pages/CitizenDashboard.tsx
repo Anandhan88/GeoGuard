@@ -119,6 +119,15 @@ export default function CitizenDashboard() {
 
   const [satStatus, setSatStatus] = useState<any>(null);
 
+  const fetchSatelliteInfo = async () => {
+    try {
+      const satRes = await axios.get('/api/satellite/latest');
+      if (satRes.data?.data) setSatStatus(satRes.data.data);
+    } catch (e) {
+      console.error("Failed to load satellite dashboard data:", e);
+    }
+  };
+
   useEffect(() => {
     // Reports are global, so fetch them on mount
     fetchReports();
@@ -131,15 +140,6 @@ export default function CitizenDashboard() {
       fetchSatelliteInfo();
     }
   }, [selectedLocation]);
-
-  const fetchSatelliteInfo = async () => {
-    try {
-      const satRes = await axios.get('/api/satellite/latest');
-      if (satRes.data?.data) setSatStatus(satRes.data.data);
-    } catch (e) {
-      console.error("Failed to load satellite dashboard data:", e);
-    }
-  };
 
   const SEVERITY_COLOR: Record<string, string> = {
     Critical: '#ef4444',
