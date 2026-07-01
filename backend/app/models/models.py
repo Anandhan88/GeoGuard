@@ -35,13 +35,24 @@ def _get_point_coord(location, index):
 def _set_point_coord(instance, lat=None, lng=None):
     try:
         from geoalchemy2.elements import WKTElement
-        current_lat = lat
-        current_lng = lng
-        if lat is None:
-            current_lat = instance.latitude
-        if lng is None:
-            current_lng = instance.longitude
-        
+        if not hasattr(instance, '_temp_lat'):
+            instance._temp_lat = None
+        if not hasattr(instance, '_temp_lng'):
+            instance._temp_lng = None
+
+        if lat is not None:
+            instance._temp_lat = lat
+        if lng is not None:
+            instance._temp_lng = lng
+
+        current_lat = instance._temp_lat
+        if current_lat is None:
+            current_lat = _get_point_coord(instance.location, 1)
+
+        current_lng = instance._temp_lng
+        if current_lng is None:
+            current_lng = _get_point_coord(instance.location, 0)
+
         if current_lat is not None and current_lng is not None:
             instance.location = WKTElement(f"POINT({current_lng} {current_lat})", srid=4326)
     except Exception:

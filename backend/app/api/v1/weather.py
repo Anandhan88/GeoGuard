@@ -357,6 +357,12 @@ async def fetch_live_openmeteo(lat: float, lng: float):
 @router.get("/search")
 async def search_location(query: str = Query(..., min_length=2)):
     """Search for any location using OpenStreetMap Nominatim geocoding API."""
+    query_clean = query.strip().lower()
+    cache_key = f"weather:search:{query_clean}"
+    cached = await WeatherCache.get(cache_key)
+    if cached is not None:
+        return cached
+
     client = get_http_client()
     headers = {"User-Agent": "GeoGuardAI/1.0"}
     url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=5&countrycodes=in"
@@ -364,7 +370,7 @@ async def search_location(query: str = Query(..., min_length=2)):
         response = await client.get(url, headers=headers)
         if response.status_code == 200:
             results = response.json()
-            return [
+            search_results = [
                 {
                     "name": r.get("display_name"),
                     "lat": float(r.get("lat")),
@@ -374,6 +380,8 @@ async def search_location(query: str = Query(..., min_length=2)):
                 }
                 for r in results
             ]
+            await WeatherCache.set(cache_key, search_results, expire_seconds=86400)
+            return search_results
         return []
     except Exception as e:
         print(f"Error calling Nominatim geocoder: {e}")

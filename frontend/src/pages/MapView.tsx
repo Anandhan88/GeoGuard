@@ -43,9 +43,15 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
 
 // ─── Custom Leaflet Click Event Listener ──────────────────────────────────────
 function LeafletMapEventsHandler({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
+  const onMapClickRef = useRef(onMapClick);
+  
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
+
   useLeafletMapEvents({
     click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
+      onMapClickRef.current(e.latlng.lat, e.latlng.lng);
     }
   });
   return null;
@@ -117,10 +123,12 @@ function GoogleFloodZonePolygons({
   zones,
   visible,
   onZoneClick,
+  clickable = true,
 }: {
   zones: any[];
   visible: boolean;
   onZoneClick: (pred: any) => void;
+  clickable?: boolean;
 }) {
   const map = useGoogleMap();
   const polygonsRef = useRef<google.maps.Polygon[]>([]);
@@ -148,11 +156,13 @@ function GoogleFloodZonePolygons({
         strokeWeight: 2,
         fillColor: color,
         fillOpacity: 0.2,
-        clickable: true,
+        clickable,
         zIndex: zone.riskLevel === 'critical' ? 10 : 5,
       });
 
-      polygon.addListener('click', () => onZoneClick(zone.prediction));
+      if (clickable) {
+        polygon.addListener('click', () => onZoneClick(zone.prediction));
+      }
       polygonsRef.current.push(polygon);
     });
 
@@ -160,7 +170,7 @@ function GoogleFloodZonePolygons({
       polygonsRef.current.forEach((p) => p.setMap(null));
       polygonsRef.current = [];
     };
-  }, [map, zones, visible, onZoneClick]);
+  }, [map, zones, visible, onZoneClick, clickable]);
 
   return null;
 }
@@ -334,7 +344,7 @@ function GoogleUserLocationMarker({ position }: { position: { lat: number; lng: 
   );
 }
 
-function GoogleShelterMarker({ shelter, onClick }: { shelter: any; onClick: () => void }) {
+function GoogleShelterMarker({ shelter, onClick }: { shelter: any; onClick?: () => void }) {
   return (
     <GoogleAdvancedMarker
       position={{ lat: shelter.location.lat, lng: shelter.location.lng }}
@@ -355,7 +365,7 @@ function GoogleShelterMarker({ shelter, onClick }: { shelter: any; onClick: () =
   );
 }
 
-function GoogleReportMarker({ report, onClick }: { report: any; onClick: () => void }) {
+function GoogleReportMarker({ report, onClick }: { report: any; onClick?: () => void }) {
   const borderColor = report.severity >= 4 ? '#ef4444' : '#f59e0b';
   return (
     <GoogleAdvancedMarker
@@ -387,6 +397,7 @@ function GoogleMapContent({
   onZoneClick,
   userLocation,
   searchMarker,
+  placementMode,
 }: {
   activeMapLayers: string[];
   predictions: any[];
@@ -397,6 +408,7 @@ function GoogleMapContent({
   onZoneClick: (pred: any) => void;
   userLocation: { lat: number; lng: number } | null;
   searchMarker: { lat: number; lng: number; name: string } | null;
+  placementMode: 'shelter' | 'zone' | null;
 }) {
   const [selectedShelter, setSelectedShelter] = useState<any>(null);
   const [selectedReport, setSelectedReport] = useState<any>(null);
@@ -442,6 +454,7 @@ function GoogleMapContent({
         zones={floodZones}
         visible={activeMapLayers.includes('flood-zones')}
         onZoneClick={onZoneClick}
+        clickable={!placementMode}
       />
 
       {/* Heatmap */}
@@ -464,7 +477,7 @@ function GoogleMapContent({
             <GoogleShelterMarker
               key={shelter.id}
               shelter={shelter}
-              onClick={() => { setSelectedShelter(shelter); setSelectedReport(null); }}
+              onClick={placementMode ? undefined : () => { setSelectedShelter(shelter); setSelectedReport(null); }}
             />
           ))}
 
@@ -511,7 +524,7 @@ function GoogleMapContent({
             <GoogleReportMarker
               key={report.id}
               report={report}
-              onClick={() => { setSelectedReport(report); setSelectedShelter(null); }}
+              onClick={placementMode ? undefined : () => { setSelectedReport(report); setSelectedShelter(null); }}
             />
           ))}
 
@@ -822,6 +835,15 @@ export default function MapView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchSuggestions, setSearchSuggestions] = useState<any[]>([]);
   const [searchedPredictData, setSearchedPredictData] = useState<any>(null);
+  const searchDebounceTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimeoutRef.current) {
+        clearTimeout(searchDebounceTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Map settings
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
@@ -904,21 +926,35 @@ export default function MapView() {
   }, [mapRef]);
 
   // Search input geocoding
-  const triggerSearch = async (val: string) => {
-    if (!val || val.length < 2) return;
-    try {
-      const res = await api.get(`/weather/search?query=${encodeURIComponent(val)}`);
-      setSearchSuggestions(res.data || []);
-    } catch (e) {
-      console.error("Geocoding search failed:", e);
+  const triggerSearch = useCallback((val: string) => {
+    if (!val || val.trim().length < 2) {
+      setSearchSuggestions([]);
+      return;
     }
-  };
+
+    if (searchDebounceTimeoutRef.current) {
+      clearTimeout(searchDebounceTimeoutRef.current);
+    }
+
+    searchDebounceTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/weather/search?query=${encodeURIComponent(val)}`);
+        setSearchSuggestions(res.data || []);
+      } catch (e) {
+        console.error("Geocoding search failed:", e);
+      }
+    }, 400);
+  }, []);
 
   const handleSelectSuggestion = async (s: any) => {
     const lat = s.lat;
     const lng = s.lng;
     const name = s.name.split(',')[0];
     
+    if (searchDebounceTimeoutRef.current) {
+      clearTimeout(searchDebounceTimeoutRef.current);
+    }
+
     setSearchMarker({ lat, lng, name });
     setMapCenter([lat, lng]);
     setMapZoom(13);
@@ -1000,12 +1036,12 @@ export default function MapView() {
 
           {/* User Location */}
           {userLocation && (
-            <LeafletMarker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon} />
+            <LeafletMarker position={[userLocation.lat, userLocation.lng]} icon={userLocationIcon} interactive={false} />
           )}
 
           {/* Search Result Marker */}
           {searchMarker && (
-            <LeafletMarker position={[searchMarker.lat, searchMarker.lng]} icon={searchMarkerIcon}>
+            <LeafletMarker position={[searchMarker.lat, searchMarker.lng]} icon={searchMarkerIcon} interactive={!placementMode}>
               <LeafletPopup>
                 <div className="bg-slate-900 text-white p-2 rounded-lg text-xs min-w-[140px]">
                   <p className="font-bold mb-1">{searchMarker.name}</p>
@@ -1034,8 +1070,9 @@ export default function MapView() {
                     fillColor: getRiskColor(pred.riskLevel),
                     fillOpacity: 0.2,
                     weight: 2,
+                    interactive: !placementMode
                   }}
-                  eventHandlers={{
+                  eventHandlers={placementMode ? {} : {
                     click: () => setSelectedPrediction(pred)
                   }}
                 />
@@ -1057,6 +1094,7 @@ export default function MapView() {
                       fillColor: '#c084fc',
                       fillOpacity: 0.35,
                       weight: 2,
+                      interactive: !placementMode
                     }}
                   />
                 );
@@ -1081,6 +1119,7 @@ export default function MapView() {
                     fillColor: `rgb(${r}, ${g}, ${b})`,
                     fillOpacity: intensity * 0.35,
                     stroke: false,
+                    interactive: !placementMode
                   }}
                 />
               );
@@ -1122,6 +1161,7 @@ export default function MapView() {
                   key={shelter.id}
                   position={[shelter.location.lat, shelter.location.lng]}
                   icon={shelterIcon}
+                  interactive={!placementMode}
                 >
                   <LeafletPopup>
                     <div className="bg-slate-900 text-white p-3 rounded-lg text-xs min-w-[210px] border border-white/5 font-sans">
@@ -1167,6 +1207,7 @@ export default function MapView() {
                   key={report.id}
                   position={[report.location.lat, report.location.lng]}
                   icon={getReportIcon(report.type, report.severity)}
+                  interactive={!placementMode}
                 >
                   <LeafletPopup>
                     <div className="bg-slate-900 text-white p-3 rounded-lg text-xs min-w-[200px] border border-white/5 font-sans">
@@ -1218,6 +1259,7 @@ export default function MapView() {
               onZoneClick={handleZoneClick}
               userLocation={userLocation}
               searchMarker={searchMarker}
+              placementMode={placementMode}
             />
           </GoogleMap>
         </APIProvider>

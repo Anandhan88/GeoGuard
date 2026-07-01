@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,23 +38,42 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceTimeoutRef = useRef<any>(null);
 
-  const handleSearchChange = async (val: string) => {
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSearchChange = useCallback((val: string) => {
     setSearchQuery(val);
     if (!val || val.trim().length < 2) {
       setSuggestions([]);
       return;
     }
-    try {
-      const res = await api.get(`/weather/search?query=${encodeURIComponent(val)}`);
-      setSuggestions(res.data || []);
-      setShowSuggestions(true);
-    } catch (e) {
-      console.error("Geocoding search failed:", e);
+
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
     }
-  };
+
+    debounceTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get(`/weather/search?query=${encodeURIComponent(val)}`);
+        setSuggestions(res.data || []);
+        setShowSuggestions(true);
+      } catch (e) {
+        console.error("Geocoding search failed:", e);
+      }
+    }, 400);
+  }, []);
 
   const handleSelectSuggestion = (suggestion: any) => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
     setSelectedLocation({
       name: suggestion.name,
       lat: suggestion.lat,
