@@ -38,3 +38,7 @@ This will launch:
 3. **Safe Evacuation Routing**: Dynamic pathfinding using OpenStreetMap data (A* algorithm) that automatically avoids hazard and risk zones.
 4. **Live Weather & Forecasts**: Real-time integration with the Open-Meteo API.
 5. **Real-time Push Notifications**: Instant broadcast of critical alerts to authorities and users.
+
+## Development
+
+For instructions on how to contribute or run local development checks, please refer to the respective subdirectories (`/backend`, `/frontend`, and `/ml`).
