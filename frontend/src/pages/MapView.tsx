@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -30,7 +30,37 @@ import { getRiskColor, getRiskBadgeClass, formatNumber } from '../utils/helpers'
 import { useAppStore } from '../stores/useAppStore';
 import { api } from '../utils/api';
 
-const GMAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+const GMAPS_API_KEY =
+  (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) ||
+  'AIzaSyAUEE1gC3r_ahb63xHyKK4A9wsEhPbSbnQ';
+
+// ─── Error Boundary for Custom Map Markers ─────────────────────────────────────
+interface MapMarkerErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface MapMarkerErrorBoundaryState {
+  hasError: boolean;
+}
+
+class MapMarkerErrorBoundary extends Component<MapMarkerErrorBoundaryProps, MapMarkerErrorBoundaryState> {
+  public state: MapMarkerErrorBoundaryState = { hasError: false };
+
+  public static getDerivedStateFromError(_: Error): MapMarkerErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.warn('MapMarkerErrorBoundary caught marker error:', error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return null;
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Custom Leaflet Map Controller for Panning & Zooming ──────────────────────
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
@@ -134,7 +164,7 @@ function GoogleFloodZonePolygons({
   const polygonsRef = useRef<google.maps.Polygon[]>([]);
 
   useEffect(() => {
-    if (!map || !visible) {
+    if (!map || typeof google === 'undefined' || !google.maps || !visible) {
       polygonsRef.current.forEach((p) => p.setMap(null));
       polygonsRef.current = [];
       return;
@@ -144,9 +174,14 @@ function GoogleFloodZonePolygons({
     polygonsRef.current = [];
 
     zones.forEach((zone) => {
+      if (!zone?.center?.lat || !zone?.center?.lng) return;
+      const lat = Number(zone.center.lat);
+      const lng = Number(zone.center.lng);
+      if (isNaN(lat) || isNaN(lng)) return;
+
       const color = getRiskColor(zone.riskLevel);
       const half = 0.008 + (zone.riskScore / 100) * 0.018;
-      const paths = centerToLatLngBoundsGoogle(zone.center.lat, zone.center.lng, half);
+      const paths = centerToLatLngBoundsGoogle(lat, lng, half);
 
       const polygon = new google.maps.Polygon({
         paths,
@@ -188,7 +223,7 @@ function GoogleHeatmapLayer({
   const circlesRef = useRef<google.maps.Circle[]>([]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || typeof google === 'undefined' || !google.maps) return;
 
     circlesRef.current.forEach((c) => c.setMap(null));
     circlesRef.current = [];
@@ -211,7 +246,9 @@ function GoogleHeatmapLayer({
             ],
           });
         }
-        const data = points.map((p) => new google.maps.LatLng(p.lat, p.lng));
+        const data = (points || [])
+          .filter((p) => p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng))
+          .map((p) => new google.maps.LatLng(p.lat, p.lng));
         heatmapRef.current.setData(data);
         heatmapRef.current.setMap(visible ? map : null);
         nativeSuccess = true;
@@ -225,25 +262,27 @@ function GoogleHeatmapLayer({
     }
 
     if (!nativeSuccess && visible && points && points.length > 0) {
-      const circles = points.map((p) => {
-        const intensity = p.intensity || 0.5;
-        const r = Math.round(16 + (239 - 16) * intensity);
-        const g = Math.round(185 + (68 - 185) * intensity);
-        const b = Math.round(129 + (68 - 129) * intensity);
-        const color = `rgb(${r}, ${g}, ${b})`;
+      const circles = points
+        .filter((p) => p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng))
+        .map((p) => {
+          const intensity = p.intensity || 0.5;
+          const r = Math.round(16 + (239 - 16) * intensity);
+          const g = Math.round(185 + (68 - 185) * intensity);
+          const b = Math.round(129 + (68 - 129) * intensity);
+          const color = `rgb(${r}, ${g}, ${b})`;
 
-        return new google.maps.Circle({
-          map,
-          center: { lat: p.lat, lng: p.lng },
-          radius: 250,
-          fillColor: color,
-          fillOpacity: intensity * 0.4,
-          strokeColor: color,
-          strokeOpacity: intensity * 0.6,
-          strokeWeight: 1,
-          clickable: false,
+          return new google.maps.Circle({
+            map,
+            center: { lat: p.lat, lng: p.lng },
+            radius: 250,
+            fillColor: color,
+            fillOpacity: intensity * 0.4,
+            strokeColor: color,
+            strokeOpacity: intensity * 0.6,
+            strokeWeight: 1,
+            clickable: false,
+          });
         });
-      });
       circlesRef.current = circles;
     }
 
@@ -262,23 +301,23 @@ function GoogleEvacuationRoutes({ routes, visible }: { routes: any[]; visible: b
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || typeof google === 'undefined' || !google.maps) return;
 
     polylinesRef.current.forEach((p) => p.setMap(null));
     polylinesRef.current = [];
 
-    if (!visible) return;
+    if (!visible || !routes) return;
 
     routes.forEach((route) => {
-      const origin = route.origin;
-      const destination = route.destination;
-      const waypoints = route.waypoints || [];
-      if (!origin?.lat || !destination?.lat) return;
+      const origin = route?.origin;
+      const destination = route?.destination;
+      const waypoints = route?.waypoints || [];
+      if (!origin?.lat || !origin?.lng || !destination?.lat || !destination?.lng) return;
 
       const path = [
-        { lat: origin.lat, lng: origin.lng },
-        ...waypoints.map((wp: any) => ({ lat: wp.lat, lng: wp.lng })),
-        { lat: destination.lat, lng: destination.lng },
+        { lat: Number(origin.lat), lng: Number(origin.lng) },
+        ...waypoints.filter((wp: any) => wp?.lat && wp?.lng).map((wp: any) => ({ lat: Number(wp.lat), lng: Number(wp.lng) })),
+        { lat: Number(destination.lat), lng: Number(destination.lng) },
       ];
 
       const isRecommended = route.isRecommended || route.is_recommended;
@@ -312,11 +351,14 @@ function GoogleAutoFitBounds({ points }: { points: { lat: number; lng: number }[
   const prevCount = useRef(0);
 
   useEffect(() => {
-    if (!map || points.length === 0) return;
-    // Re-fit when the number of points changes (initial load or data refresh)
+    if (!map || typeof google === 'undefined' || !google.maps || !points || points.length === 0) return;
     if (points.length !== prevCount.current) {
       const bounds = new google.maps.LatLngBounds();
-      points.forEach((p) => bounds.extend(p));
+      points.forEach((p) => {
+        if (p && typeof p.lat === 'number' && typeof p.lng === 'number' && !isNaN(p.lat) && !isNaN(p.lng)) {
+          bounds.extend(p);
+        }
+      });
       map.fitBounds(bounds, 60);
       prevCount.current = points.length;
     }
@@ -326,64 +368,80 @@ function GoogleAutoFitBounds({ points }: { points: { lat: number; lng: number }[
 }
 
 function GoogleUserLocationMarker({ position }: { position: { lat: number; lng: number } | null }) {
-  if (!position) return null;
+  if (!position || typeof position.lat !== 'number' || typeof position.lng !== 'number' || isNaN(position.lat) || isNaN(position.lng)) return null;
   return (
-    <GoogleAdvancedMarker position={position} title="Your Location">
-      <div
-        style={{
-          width: 18,
-          height: 18,
-          background: '#3b82f6',
-          borderRadius: '50%',
-          border: '3px solid white',
-          boxShadow: '0 0 0 4px rgba(59,130,246,0.3)',
-          animation: 'pulse 2s infinite',
-        }}
-      />
-    </GoogleAdvancedMarker>
+    <MapMarkerErrorBoundary>
+      <GoogleAdvancedMarker position={{ lat: position.lat, lng: position.lng }} title="Your Location">
+        <div
+          style={{
+            width: 18,
+            height: 18,
+            background: '#3b82f6',
+            borderRadius: '50%',
+            border: '3px solid white',
+            boxShadow: '0 0 0 4px rgba(59,130,246,0.3)',
+            animation: 'pulse 2s infinite',
+          }}
+        />
+      </GoogleAdvancedMarker>
+    </MapMarkerErrorBoundary>
   );
 }
 
 function GoogleShelterMarker({ shelter, onClick }: { shelter: any; onClick?: () => void }) {
+  if (!shelter?.location?.lat || !shelter?.location?.lng) return null;
+  const lat = Number(shelter.location.lat);
+  const lng = Number(shelter.location.lng);
+  if (isNaN(lat) || isNaN(lng)) return null;
+
   return (
-    <GoogleAdvancedMarker
-      position={{ lat: shelter.location.lat, lng: shelter.location.lng }}
-      onClick={onClick}
-      title={shelter.name}
-    >
-      <div
-        style={{
-          width: 30, height: 30,
-          background: 'linear-gradient(135deg,#10b981,#06b6d4)',
-          borderRadius: 8, border: '2px solid white',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 15, boxShadow: '0 2px 10px rgba(16,185,129,0.5)',
-          cursor: 'pointer',
-        }}
-      >🏠</div>
-    </GoogleAdvancedMarker>
+    <MapMarkerErrorBoundary>
+      <GoogleAdvancedMarker
+        position={{ lat, lng }}
+        onClick={onClick}
+        title={shelter.name}
+      >
+        <div
+          style={{
+            width: 30, height: 30,
+            background: 'linear-gradient(135deg,#10b981,#06b6d4)',
+            borderRadius: 8, border: '2px solid white',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, boxShadow: '0 2px 10px rgba(16,185,129,0.5)',
+            cursor: 'pointer',
+          }}
+        >🏠</div>
+      </GoogleAdvancedMarker>
+    </MapMarkerErrorBoundary>
   );
 }
 
 function GoogleReportMarker({ report, onClick }: { report: any; onClick?: () => void }) {
+  if (!report?.location?.lat || !report?.location?.lng) return null;
+  const lat = Number(report.location.lat);
+  const lng = Number(report.location.lng);
+  if (isNaN(lat) || isNaN(lng)) return null;
+
   const borderColor = report.severity >= 4 ? '#ef4444' : '#f59e0b';
   return (
-    <GoogleAdvancedMarker
-      position={{ lat: report.location.lat, lng: report.location.lng }}
-      onClick={onClick}
-      title={report.type}
-    >
-      <div
-        style={{
-          width: 26, height: 26,
-          background: 'rgba(15,23,42,0.92)',
-          borderRadius: 7, border: `1.5px solid ${borderColor}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          cursor: 'pointer',
-        }}
-      >{REPORT_ICONS[report.type] ?? '📍'}</div>
-    </GoogleAdvancedMarker>
+    <MapMarkerErrorBoundary>
+      <GoogleAdvancedMarker
+        position={{ lat, lng }}
+        onClick={onClick}
+        title={report.type || 'Report'}
+      >
+        <div
+          style={{
+            width: 26, height: 26,
+            background: 'rgba(15,23,42,0.92)',
+            borderRadius: 7, border: `1.5px solid ${borderColor}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            cursor: 'pointer',
+          }}
+        >{REPORT_ICONS[report.type] ?? '📍'}</div>
+      </GoogleAdvancedMarker>
+    </MapMarkerErrorBoundary>
   );
 }
 
@@ -913,7 +971,8 @@ export default function MapView() {
           mapRef.setZoom(13);
         }
       },
-      () => {
+      (err) => {
+        console.warn("Geolocation positioning error:", err);
         // Fallback to Tamil Nadu overview
         setMapCenter([10.8, 78.7]);
         setMapZoom(7);
@@ -921,9 +980,28 @@ export default function MapView() {
           mapRef.panTo({ lat: 10.8, lng: 78.7 });
           mapRef.setZoom(7);
         }
-      }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
     );
   }, [mapRef]);
+
+  // Real-Time Watch Position Effect
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    handleLocate();
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      (err) => console.warn("Watch position error:", err),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [handleLocate]);
 
   // Search input geocoding
   const triggerSearch = useCallback((val: string) => {
@@ -1229,9 +1307,9 @@ export default function MapView() {
               ))}
         </MapContainer>
       ) : (
-        <APIProvider apiKey={GMAPS_API_KEY} version="3.58" libraries={['visualization']}>
+        <APIProvider apiKey={GMAPS_API_KEY} libraries={['marker', 'visualization']}>
           <GoogleMap
-            mapId="geoguard-map"
+            mapId="DEMO_MAP_ID"
             center={{ lat: mapCenter[0], lng: mapCenter[1] }}
             zoom={mapZoom}
             gestureHandling="greedy"
@@ -1276,6 +1354,22 @@ export default function MapView() {
             onChange={(e) => {
               setSearchQuery(e.target.value);
               triggerSearch(e.target.value);
+            }}
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter') {
+                if (searchSuggestions.length > 0) {
+                  handleSelectSuggestion(searchSuggestions[0]);
+                } else if (searchQuery.trim().length >= 2) {
+                  try {
+                    const res = await api.get(`/weather/search?query=${encodeURIComponent(searchQuery)}`);
+                    if (res.data && res.data.length > 0) {
+                      handleSelectSuggestion(res.data[0]);
+                    }
+                  } catch (err) {
+                    console.error("Direct search error:", err);
+                  }
+                }
+              }
             }}
             className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none"
           />

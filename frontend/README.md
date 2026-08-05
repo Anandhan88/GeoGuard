@@ -1,6 +1,6 @@
-# React + TypeScript + Vite
+# GeoGuard AI Frontend (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the React + TypeScript frontend for the GeoGuard AI application. It provides interactive Leaflet maps, weather monitoring, threat classification, dynamic routing, and real-time dashboard capabilities.
 
 Currently, two official plugins are available:
 

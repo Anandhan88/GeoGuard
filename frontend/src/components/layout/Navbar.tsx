@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
 import {
   Bell,
   Shield,
@@ -20,6 +21,8 @@ import { useTranslation } from '../../utils/translations';
 import { api } from '../../utils/api';
 
 export default function Navbar() {
+  const { logout: firebaseLogout } = useAuth();
+  const navigate = useNavigate();
   const { t, lang } = useTranslation();
   const {
     toggleSidebar,
@@ -83,7 +86,7 @@ export default function Navbar() {
     setSuggestions([]);
     setShowSuggestions(false);
   };
-  
+
   // Profile settings modal states
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [profileName, setProfileName] = useState('');
@@ -109,6 +112,19 @@ export default function Navbar() {
     setProfileLang((currentUser.languagePref as any) || 'en');
     setShowProfileModal(true);
     setShowProfile(false); // Close dropdown
+  };
+
+  const handleLogout = async () => {
+    setShowProfile(false);
+    try {
+      await firebaseLogout();
+    } catch (err) {
+      console.error("Firebase logout error:", err);
+    }
+    logout();
+    localStorage.removeItem('geoguard_access_token');
+    localStorage.removeItem('geoguard_refresh_token');
+    navigate('/login', { replace: true });
   };
 
   return (
@@ -146,6 +162,22 @@ export default function Navbar() {
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               onFocus={() => setShowSuggestions(true)}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  if (suggestions.length > 0) {
+                    handleSelectSuggestion(suggestions[0]);
+                  } else if (searchQuery.trim().length >= 2) {
+                    try {
+                      const res = await api.get(`/weather/search?query=${encodeURIComponent(searchQuery)}`);
+                      if (res.data && res.data.length > 0) {
+                        handleSelectSuggestion(res.data[0]);
+                      }
+                    } catch (err) {
+                      console.error("Direct search error:", err);
+                    }
+                  }
+                }
+              }}
               placeholder={t('search_placeholder')}
               className="input-field pl-10 pr-10 py-2 text-sm bg-white/5 w-full"
               id="global-search"
@@ -412,7 +444,7 @@ export default function Navbar() {
                   </button>
                   <div className="border-t border-white/5 my-1" />
                   <button
-                    onClick={logout}
+                    onClick={handleLogout}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-red-500/10 transition-colors text-left"
                   >
                     <LogOut size={16} className="text-red-400" />
@@ -437,7 +469,7 @@ export default function Navbar() {
               onClick={() => setShowProfileModal(false)}
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
-            
+
             {/* Modal Box */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}

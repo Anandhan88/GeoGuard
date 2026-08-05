@@ -354,20 +354,58 @@ async def fetch_live_openmeteo(lat: float, lng: float):
     raise Exception(f"Unsuccessful weather API request: status {response.status_code}")
 
 
+# Pre-defined high-accuracy geocoding database for Tamil Nadu & Indian major hubs
+LOCAL_GEOCODE_DB = [
+    {"name": "Chennai, Tamil Nadu", "lat": 13.0827, "lng": 80.2707, "type": "city"},
+    {"name": "Velachery, Chennai, Tamil Nadu", "lat": 12.9750, "lng": 80.2206, "type": "suburb"},
+    {"name": "Anna Nagar, Chennai, Tamil Nadu", "lat": 13.0850, "lng": 80.2101, "type": "suburb"},
+    {"name": "Tambaram, Chennai, Tamil Nadu", "lat": 12.9229, "lng": 80.1275, "type": "suburb"},
+    {"name": "Adyar, Chennai, Tamil Nadu", "lat": 13.0012, "lng": 80.2565, "type": "suburb"},
+    {"name": "Madurai, Tamil Nadu", "lat": 9.9252, "lng": 78.1198, "type": "city"},
+    {"name": "Coimbatore, Tamil Nadu", "lat": 11.0168, "lng": 76.9558, "type": "city"},
+    {"name": "Tiruchirappalli (Trichy), Tamil Nadu", "lat": 10.7905, "lng": 78.7047, "type": "city"},
+    {"name": "Salem, Tamil Nadu", "lat": 11.6643, "lng": 78.1460, "type": "city"},
+    {"name": "Tirunelveli, Tamil Nadu", "lat": 8.7139, "lng": 77.7567, "type": "city"},
+    {"name": "Erode, Tamil Nadu", "lat": 11.3410, "lng": 77.7172, "type": "city"},
+    {"name": "Vellore, Tamil Nadu", "lat": 12.9165, "lng": 79.1325, "type": "city"},
+    {"name": "Cuddalore, Tamil Nadu", "lat": 11.7480, "lng": 79.7714, "type": "city"},
+    {"name": "Kanchipuram, Tamil Nadu", "lat": 12.8342, "lng": 79.7036, "type": "city"},
+    {"name": "Thanjavur, Tamil Nadu", "lat": 10.7870, "lng": 79.1378, "type": "city"},
+    {"name": "Dindigul, Tamil Nadu", "lat": 10.3673, "lng": 77.9803, "type": "city"},
+    {"name": "Nagapattinam, Tamil Nadu", "lat": 10.7656, "lng": 79.8424, "type": "city"},
+    {"name": "Thoothukudi (Tuticorin), Tamil Nadu", "lat": 8.7642, "lng": 78.1348, "type": "city"},
+    {"name": "Nagercoil, Kanyakumari, Tamil Nadu", "lat": 8.1833, "lng": 77.4119, "type": "city"},
+    {"name": "Hosur, Tamil Nadu", "lat": 12.7409, "lng": 77.8253, "type": "city"},
+    {"name": "Pudukkottai, Tamil Nadu", "lat": 10.3797, "lng": 78.8202, "type": "city"},
+    {"name": "Ariyalur, Tamil Nadu", "lat": 11.1401, "lng": 79.0786, "type": "city"},
+    {"name": "Karur, Tamil Nadu", "lat": 10.9601, "lng": 78.0766, "type": "city"},
+    {"name": "Ramanathapuram, Tamil Nadu", "lat": 9.3639, "lng": 78.8395, "type": "city"},
+    {"name": "Bengaluru, Karnataka", "lat": 12.9716, "lng": 77.5946, "type": "city"},
+    {"name": "Mumbai, Maharashtra", "lat": 19.0760, "lng": 72.8777, "type": "city"},
+    {"name": "Delhi, NCR", "lat": 28.6139, "lng": 77.2090, "type": "city"},
+    {"name": "Hyderabad, Telangana", "lat": 17.3850, "lng": 78.4867, "type": "city"},
+    {"name": "Kochi, Kerala", "lat": 9.9312, "lng": 76.2673, "type": "city"},
+    {"name": "Thiruvananthapuram, Kerala", "lat": 8.5241, "lng": 76.9366, "type": "city"},
+]
+
 @router.get("/search")
 async def search_location(query: str = Query(..., min_length=2)):
-    """Search for any location using OpenStreetMap Nominatim geocoding API."""
+    """Search for any location using OpenStreetMap Nominatim geocoding API with local fallback."""
+    import urllib.parse
     query_clean = query.strip().lower()
     cache_key = f"weather:search:{query_clean}"
     cached = await WeatherCache.get(cache_key)
     if cached is not None:
         return cached
 
+    encoded_query = urllib.parse.quote(query.strip())
     client = get_http_client()
-    headers = {"User-Agent": "GeoGuardAI/1.0"}
-    url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=5&countrycodes=in"
+    headers = {"User-Agent": "GeoGuardAI/1.0 (contact@geoguard.ai)"}
+    url = f"https://nominatim.openstreetmap.org/search?q={encoded_query}&format=json&limit=6&countrycodes=in"
+
+    search_results = []
     try:
-        response = await client.get(url, headers=headers)
+        response = await client.get(url, headers=headers, timeout=5.0)
         if response.status_code == 200:
             results = response.json()
             search_results = [
@@ -375,17 +413,26 @@ async def search_location(query: str = Query(..., min_length=2)):
                     "name": r.get("display_name"),
                     "lat": float(r.get("lat")),
                     "lng": float(r.get("lon")),
-                    "class": r.get("class"),
-                    "type": r.get("type"),
+                    "class": r.get("class", "place"),
+                    "type": r.get("type", "location"),
                 }
                 for r in results
+                if r.get("lat") and r.get("lon")
             ]
-            await WeatherCache.set(cache_key, search_results, expire_seconds=86400)
-            return search_results
-        return []
     except Exception as e:
-        print(f"Error calling Nominatim geocoder: {e}")
-        return []
+        print(f"Nominatim geocoder error/timeout: {e}")
+
+    # Fallback to local geocode DB if Nominatim returned empty
+    if not search_results:
+        search_results = [
+            loc for loc in LOCAL_GEOCODE_DB
+            if query_clean in loc["name"].lower()
+        ]
+
+    if search_results:
+        await WeatherCache.set(cache_key, search_results, expire_seconds=86400)
+
+    return search_results
 
 
 @router.get("/current")

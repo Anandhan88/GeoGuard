@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { useAppStore } from '../../stores/useAppStore';
@@ -7,22 +7,13 @@ import { useRealtimeAlerts } from '../../hooks/useRealtimeAlerts';
 
 export default function DashboardLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const loadCurrentUser = useAppStore((s) => s.loadCurrentUser);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      // First attempt to load user profile using stored JWT
-      await loadCurrentUser();
-      // If store is still not authenticated, redirect to login
-      if (!useAppStore.getState().isAuthenticated) {
-        navigate('/login');
-      }
-    };
-    checkAuth();
-  }, [isAuthenticated, navigate, loadCurrentUser]);
-  
+    // Single execution on mount to load user profile without infinite re-render loops
+    loadCurrentUser();
+  }, [loadCurrentUser]);
+
   // Connect to real-time WebSocket alerts
   useRealtimeAlerts();
 

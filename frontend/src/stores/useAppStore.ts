@@ -114,7 +114,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { access_token, refresh_token, user } = res.data;
       localStorage.setItem('geoguard_access_token', access_token);
       localStorage.setItem('geoguard_refresh_token', refresh_token);
-      
+
       const mappedUser: User = {
         id: user.id,
         email: user.email,
@@ -123,7 +123,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         languagePref: user.language_pref || 'en',
         phone: user.phone,
       };
-      
+
       set({ user: mappedUser, isAuthenticated: true, currentLanguage: mappedUser.languagePref, isLoading: false });
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Failed to sign in';
@@ -139,7 +139,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const { access_token, refresh_token, user } = res.data;
       localStorage.setItem('geoguard_access_token', access_token);
       localStorage.setItem('geoguard_refresh_token', refresh_token);
-      
+
       const mappedUser: User = {
         id: user.id,
         email: user.email,
@@ -148,7 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         languagePref: user.language_pref || 'en',
         phone: user.phone,
       };
-      
+
       set({ user: mappedUser, isAuthenticated: true, currentLanguage: mappedUser.languagePref, isLoading: false });
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Failed to register';
@@ -201,7 +201,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (profileData.name !== undefined) payload.name = profileData.name;
       if (profileData.phone !== undefined) payload.phone = profileData.phone;
       if (profileData.languagePref !== undefined) payload.language_pref = profileData.languagePref;
-      
+
       const res = await api.put('/auth/me', payload);
       const updated = res.data;
       const mappedUser: User = {
@@ -212,10 +212,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         languagePref: updated.language_pref || 'en',
         phone: updated.phone,
       };
-      set({ 
-        user: mappedUser, 
+      set({
+        user: mappedUser,
         currentLanguage: mappedUser.languagePref,
-        isLoading: false 
+        isLoading: false
       });
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || 'Failed to update profile';
