@@ -1,28 +1,24 @@
 """
-GeoGuard AI - Impact Assessment API
+GeoGuard AI - Impact Assessment API (MongoDB Atlas / Beanie ODM)
 """
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from fastapi import APIRouter, HTTPException
 
-from app.core.database import get_db
 from app.models.models import RiskZone, FloodPrediction
 
 router = APIRouter()
 
 
-async def get_live_impact_assessments(db: AsyncSession):
-    # Query all predictions and join risk zones
-    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone))
-    result = await db.execute(query)
-    predictions = result.scalars().unique().all()
+async def get_live_impact_assessments():
+    predictions = await FloodPrediction.find_all().to_list()
+    zones = await RiskZone.find_all().to_list()
+    zone_map = {z.id: z for z in zones}
     
     assessments = []
     for pred in predictions:
-        zone = pred.zone
+        zone = zone_map.get(pred.zone_id)
+        if not zone:
+            continue
         
-        # Calculate dynamic impact fields
         risk_factor = pred.risk_score / 100.0
         pop_affected = int(zone.population * risk_factor)
         buildings = int(pop_affected / 12) if pop_affected > 0 else 0
@@ -34,7 +30,7 @@ async def get_live_impact_assessments(db: AsyncSession):
         
         assessments.append({
             "zoneId": zone.id,
-            "zone_id": zone.id, # support both casing styles
+            "zone_id": zone.id,
             "zoneName": zone.name,
             "zone_name": zone.name,
             "population_affected": pop_affected,
@@ -63,9 +59,9 @@ async def get_live_impact_assessments(db: AsyncSession):
 
 
 @router.get("/")
-async def list_impact_assessments(db: AsyncSession = Depends(get_db)):
+async def list_impact_assessments():
     """List all impact assessments."""
-    assessments = await get_live_impact_assessments(db)
+    assessments = await get_live_impact_assessments()
     if not assessments:
         return {"assessments": [], "summary": {"total_population_affected": 0, "total_economic_loss_lakhs": 0, "total_zones_affected": 0, "avg_impact_score": 0}}
         
@@ -84,15 +80,16 @@ async def list_impact_assessments(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{zone_id}")
-async def get_impact_assessment(zone_id: str, db: AsyncSession = Depends(get_db)):
+async def get_impact_assessment(zone_id: str):
     """Get detailed impact assessment for a zone."""
-    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone)).filter(FloodPrediction.zone_id == zone_id)
-    result = await db.execute(query)
-    pred = result.scalars().first()
+    pred = await FloodPrediction.find_one(FloodPrediction.zone_id == zone_id)
     if not pred:
         raise HTTPException(status_code=404, detail="Assessment not found")
         
-    zone = pred.zone
+    zone = await RiskZone.find_one(RiskZone.id == zone_id)
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+
     risk_factor = pred.risk_score / 100.0
     pop_affected = int(zone.population * risk_factor)
     buildings = int(pop_affected / 12) if pop_affected > 0 else 0
@@ -132,9 +129,9 @@ async def get_impact_assessment(zone_id: str, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/summary/aggregate")
-async def get_aggregate_impact(db: AsyncSession = Depends(get_db)):
+async def get_aggregate_impact():
     """Get aggregate impact across all zones."""
-    assessments = await get_live_impact_assessments(db)
+    assessments = await get_live_impact_assessments()
     if not assessments:
         return {
             "total_population_affected": 0,

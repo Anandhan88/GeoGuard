@@ -1,68 +1,33 @@
 """
-GeoGuard AI - Database Configuration
-Supports SQLite and PostgreSQL/PostGIS dynamically.
+GeoGuard AI - Database Configuration (MongoDB Atlas / Motor & Beanie)
+Provides asynchronous connection to MongoDB Atlas and initializes Beanie Document models.
 """
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import declarative_base
+import logging
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
 from app.core.config import settings
+from app.models.models import all_models
 
-# Async SQLite requires check_same_thread=False
-connect_args = {}
-engine_kwargs = {}
+logger = logging.getLogger("geoguard.db")
 
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
-else:
-    # PostgreSQL: connection pooling
-    engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 20
-    engine_kwargs["pool_pre_ping"] = True
-
-# Create asynchronous engine
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    echo=settings.DEBUG,
-    **engine_kwargs,
-)
-
-from sqlalchemy import event
-
-@event.listens_for(engine.sync_engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    if settings.DATABASE_URL.startswith("sqlite"):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-64000") # 64MB cache
-        cursor.close()
-
-# Async session factory
-async_session_maker = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
-
-# Declarative base class for SQLAlchemy models
-Base = declarative_base()
+client: AsyncIOMotorClient = None
 
 
 async def init_db():
-    """Initializes the database schemas (creates all tables)."""
-    # Enable PostGIS extension if running on PostgreSQL
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        async with engine.begin() as conn:
-            await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis")
-            
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Initializes connection to MongoDB Atlas / Motor and configures Beanie document models."""
+    global client
+    logger.info(f"Connecting to MongoDB Atlas at {settings.MONGODB_URL.split('@')[-1]}...")
+    client = AsyncIOMotorClient(settings.MONGODB_URL)
+    db = client[settings.MONGODB_DB_NAME]
+    
+    await init_beanie(database=db, document_models=all_models)
+    logger.info(f"Successfully initialized Beanie ODM for MongoDB Atlas database: {settings.MONGODB_DB_NAME}")
 
 
 async def get_db():
-    """Dependency for obtaining a database session."""
-    async with async_session_maker() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    """Dependency injection placeholder for MongoDB database instance."""
+    if client is None:
+        db = AsyncIOMotorClient(settings.MONGODB_URL)[settings.MONGODB_DB_NAME]
+        yield db
+    else:
+        yield client[settings.MONGODB_DB_NAME]

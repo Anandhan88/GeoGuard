@@ -315,7 +315,6 @@ def save_satellite_image(satellite_name: str, acq_time: str, analysis: dict, loc
     import asyncio
     import random
     from datetime import datetime
-    from app.core.database import async_session_maker
     from app.models.models import SatelliteImage
     
     def clean_json_data(data):
@@ -335,44 +334,45 @@ def save_satellite_image(satellite_name: str, acq_time: str, analysis: dict, loc
             return data
 
     async def _save():
-        async with async_session_maker() as db:
-            try:
-                dt = datetime.fromisoformat(acq_time.replace("Z", ""))
-            except Exception:
-                dt = datetime.utcnow()
-                
-            file_name = os.path.basename(local_path)
-            # Standard local upload URL served by static mount
-            image_url = f"http://localhost:8000/uploads/satellite/{file_name}"
+        try:
+            dt = datetime.fromisoformat(acq_time.replace("Z", ""))
+        except Exception:
+            dt = datetime.utcnow()
             
-            analysis_data = {
-                "flooded_area_km": float(analysis.get("flooded_area_km", 0.0)),
-                "water_spread_pct": float(analysis.get("water_spread_pct", 0.0)),
-                "severity": str(analysis.get("severity", "Low")),
-                "risk_level": str(analysis.get("risk_level", "Low")),
-                "polygons": clean_json_data(analysis.get("polygons", [])),
-                "ndwi_score": round(random.uniform(0.65, 0.85) if analysis.get("severity") in ["High", "Critical"] else random.uniform(0.3, 0.6), 2),
-                "coverage_pct": 100,
-                "anomaly_detected": bool(analysis.get("flooded_area_km", 0.0) > 10.0),
-                "analysis": f"Satellite imagery from {satellite_name} captured on {dt.strftime('%Y-%m-%d')} indicates a flooded area of {analysis.get('flooded_area_km', 0.0)} km² with a severity level of {analysis.get('severity', 'Low')}."
-            }
-            
-            new_img = SatelliteImage(
-                source=satellite_name,
-                capture_date=dt,
-                image_url=image_url,
-                analysis_result_json=analysis_data,
-                bounds_json={"type": "Polygon", "coordinates": []}
-            )
-            db.add(new_img)
-            await db.commit()
-            print(f"Satellite Manager: Successfully saved analysis to database for {satellite_name}.")
+        file_name = os.path.basename(local_path)
+        image_url = f"http://localhost:8000/uploads/satellite/{file_name}"
+        
+        analysis_data = {
+            "flooded_area_km": float(analysis.get("flooded_area_km", 0.0)),
+            "water_spread_pct": float(analysis.get("water_spread_pct", 0.0)),
+            "severity": str(analysis.get("severity", "Low")),
+            "risk_level": str(analysis.get("risk_level", "Low")),
+            "polygons": clean_json_data(analysis.get("polygons", [])),
+            "ndwi_score": round(random.uniform(0.65, 0.85) if analysis.get("severity") in ["High", "Critical"] else random.uniform(0.3, 0.6), 2),
+            "coverage_pct": 100,
+            "anomaly_detected": bool(analysis.get("flooded_area_km", 0.0) > 10.0),
+            "analysis": f"Satellite imagery from {satellite_name} captured on {dt.strftime('%Y-%m-%d')} indicates a flooded area of {analysis.get('flooded_area_km', 0.0)} km² with a severity level of {analysis.get('severity', 'Low')}."
+        }
+        
+        new_img = SatelliteImage(
+            source=satellite_name,
+            capture_date=dt,
+            image_url=image_url,
+            analysis_result_json=analysis_data,
+            bounds_json={"type": "Polygon", "coordinates": []}
+        )
+        await new_img.insert()
+        print(f"Satellite Manager: Successfully saved analysis to MongoDB Atlas for {satellite_name}.")
             
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(_save())
-        loop.close()
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(_save())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_save())
+            loop.close()
     except Exception as e:
         print(f"Satellite Manager: Failed to save satellite image to database: {e}")
 

@@ -1,5 +1,5 @@
 """
-GeoGuard AI - OSM Pathfinding Service (Module 7)
+GeoGuard AI - OSM Pathfinding Service (MongoDB Atlas / Beanie ODM)
 Queries OpenStreetMap Overpass API, constructs a network graph,
 and calculates the safest route avoiding flood risk zones using Dijkstra and A*.
 """
@@ -7,8 +7,6 @@ import httpx
 import math
 import heapq
 from typing import List, Dict, Any, Tuple, Optional
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import FloodPrediction, CitizenReport
 
 
@@ -22,7 +20,7 @@ def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 class OSMRouter:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db=None):
         self.db = db
 
     async def _fetch_osm_data(self, min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> Dict[str, Any]:
@@ -44,13 +42,11 @@ class OSMRouter:
             raise Exception(f"Overpass API returned status code {response.status_code}")
 
     async def _get_risk_points(self) -> List[Dict[str, Any]]:
-        """Fetch active flood prediction and block report coordinates to avoid."""
+        """Fetch active flood prediction and block report coordinates from MongoDB Atlas to avoid."""
         risk_points = []
         
         # 1. Fetch predictions
-        pred_result = await self.db.execute(select(FloodPrediction))
-        preds = pred_result.scalars().all()
-        # Mock centers for zones to avoid complex polygon overlap checks
+        preds = await FloodPrediction.find_all().to_list()
         ZONE_CENTERS = {
             "zone-001": (13.0827, 80.2707),
             "zone-002": (10.7905, 78.7047),
@@ -70,18 +66,18 @@ class OSMRouter:
                     })
                     
         # 2. Fetch blocked roads reports
-        report_result = await self.db.execute(select(CitizenReport).filter(CitizenReport.type.in_(["blocked_road", "flood"])))
-        reports = report_result.scalars().all()
+        reports = await CitizenReport.find_all().to_list()
         for r in reports:
-            r_lat = r.latitude if hasattr(r, 'latitude') and r.latitude is not None else None
-            r_lng = r.longitude if hasattr(r, 'longitude') and r.longitude is not None else None
-            if r_lat and r_lng:
-                risk_points.append({
-                    "lat": r_lat,
-                    "lng": r_lng,
-                    "score": 100.0 if r.verified else 70.0,
-                    "radius_km": 0.3
-                })
+            if r.type in ["blocked_road", "flood"]:
+                r_lat = r.latitude
+                r_lng = r.longitude
+                if r_lat and r_lng:
+                    risk_points.append({
+                        "lat": r_lat,
+                        "lng": r_lng,
+                        "score": 100.0 if r.verified else 70.0,
+                        "radius_km": 0.3
+                    })
                 
         return risk_points
 
@@ -91,9 +87,7 @@ class OSMRouter:
         for rp in risk_points:
             dist = haversine(lat, lng, rp["lat"], rp["lng"])
             if dist < rp["radius_km"]:
-                # Scale penalty by closeness and risk severity
                 proximity_factor = 1.0 - (dist / rp["radius_km"])
-                # Max penalty adds up to 15x cost multiplier for critical zones
                 multiplier += (rp["score"] / 10.0) * proximity_factor
         return multiplier
 
@@ -110,10 +104,8 @@ class OSMRouter:
         orig_lat, orig_lng = origin
         dest_lat, dest_lng = destination
         
-        # 1. Fetch risk points from DB
         risk_points = await self._get_risk_points()
         
-        # 2. Setup bounding box around origin/destination with 2km padding
         min_lat = min(orig_lat, dest_lat) - 0.02
         max_lat = max(orig_lat, dest_lat) + 0.02
         min_lng = min(orig_lng, dest_lng) - 0.02
@@ -125,27 +117,22 @@ class OSMRouter:
             print(f"OSMRouter: OSM fetch failed ({e}). Falling back to local grid pathfinding.")
             return self._generate_fallback_route(origin, destination, risk_points)
             
-        # 3. Parse OSM nodes and ways
         nodes = {}
         for elem in osm_data.get("elements", []):
             if elem["type"] == "node":
                 nodes[elem["id"]] = (elem["lat"], elem["lon"])
                 
-        # Build adjacency list
         graph = {}
         for elem in osm_data.get("elements", []):
             if elem["type"] == "way" and "nodes" in elem:
                 way_nodes = elem["nodes"]
-                # Connect nodes sequentially
                 for j in range(len(way_nodes) - 1):
                     u, v = way_nodes[j], way_nodes[j+1]
                     if u in nodes and v in nodes:
-                        # Edge weight calculations
                         u_lat, u_lng = nodes[u]
                         v_lat, v_lng = nodes[v]
                         dist = haversine(u_lat, u_lng, v_lat, v_lng)
                         
-                        # Apply risk penalties
                         u_risk = self._calculate_edge_risk_penalty(u_lat, u_lng, risk_points)
                         v_risk = self._calculate_edge_risk_penalty(v_lat, v_lng, risk_points)
                         avg_risk_multiplier = (u_risk + v_risk) / 2.0
@@ -157,14 +144,12 @@ class OSMRouter:
                         if v not in graph:
                             graph[v] = []
                             
-                        # Bidirectional roads by default
                         graph[u].append((v, cost, dist))
                         graph[v].append((u, cost, dist))
                         
         if not graph:
             return self._generate_fallback_route(origin, destination, risk_points)
             
-        # 4. Find closest OSM nodes to origin and destination coordinates
         def find_nearest_node(lat: float, lng: float) -> int:
             best_node = None
             best_dist = float("inf")
@@ -182,11 +167,7 @@ class OSMRouter:
         if start_node is None or end_node is None:
             return self._generate_fallback_route(origin, destination, risk_points)
             
-        # 5. Execute Pathfinding (Dijkstra or A*)
-        # queue elements: (f_score, current_node, g_score, path_list, accum_dist)
         queue = []
-        
-        # heuristic for A*
         h_score = haversine(nodes[start_node][0], nodes[start_node][1], dest_lat, dest_lng) if algorithm == "A*" else 0.0
         heapq.heappush(queue, (h_score, start_node, 0.0, [start_node], 0.0))
         
@@ -216,10 +197,8 @@ class OSMRouter:
         if best_path is None:
             return self._generate_fallback_route(origin, destination, risk_points)
             
-        # 6. Assemble output
         waypoints = [{"lat": nodes[nid][0], "lng": nodes[nid][1]} for nid in best_path]
         
-        # Calculate risk along route
         max_multiplier = 1.0
         for wp in waypoints:
             risk_mult = self._calculate_edge_risk_penalty(wp["lat"], wp["lng"], risk_points)
@@ -227,8 +206,6 @@ class OSMRouter:
                 max_multiplier = risk_mult
                 
         risk_percentage = min(99, int((max_multiplier - 1.0) * 10))
-        
-        # Estimate walking speed of 5 km/hr with penalty
         est_time_mins = round((best_dist / 5.0) * 60.0 * (1.0 + risk_percentage / 100.0))
         
         return {
@@ -255,13 +232,11 @@ class OSMRouter:
         destination: Tuple[float, float], 
         risk_points: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Local straight-line/grid route fallback generator if OSM is unreachable."""
         orig_lat, orig_lng = origin
         dest_lat, dest_lng = destination
         
         dist = haversine(orig_lat, orig_lng, dest_lat, dest_lng)
         
-        # Generate artificial grid points
         waypoints = [
             {"lat": orig_lat, "lng": orig_lng},
             {"lat": orig_lat + (dest_lat - orig_lat) * 0.33 + 0.001, "lng": orig_lng + (dest_lng - orig_lng) * 0.33},
@@ -269,7 +244,6 @@ class OSMRouter:
             {"lat": dest_lat, "lng": dest_lng}
         ]
         
-        # Calculate risk along fallback
         max_multiplier = 1.0
         for wp in waypoints:
             risk_mult = self._calculate_edge_risk_penalty(wp["lat"], wp["lng"], risk_points)
@@ -283,7 +257,7 @@ class OSMRouter:
             "origin": {"lat": orig_lat, "lng": orig_lng},
             "destination": {"lat": dest_lat, "lng": dest_lng},
             "waypoints": waypoints,
-            "distance_km": round(dist * 1.15, 2), # factor in grid layout
+            "distance_km": round(dist * 1.15, 2),
             "estimated_time_min": max(3, est_time_mins),
             "risk_along_route": risk_percentage,
             "algorithm": "Heuristic Grid Pathfinder (OSM Fallback)",

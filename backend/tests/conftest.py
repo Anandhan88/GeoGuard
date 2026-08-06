@@ -1,41 +1,22 @@
 import asyncio
 import pytest
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from mongomock_motor import AsyncMongoMockClient
+from beanie import init_beanie
 from app.main import app
-from app.core.database import Base, get_db
+from app.models.models import all_models
 
-DATABASE_URL = "sqlite+aiosqlite:///./test_geoguard.db"
-
-@pytest.fixture
-async def test_engine():
-    engine = create_async_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield engine
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+@pytest.fixture(scope="session")
+def event_loop():
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 @pytest.fixture
-async def db_session(test_engine):
-    async_session = async_sessionmaker(
-        bind=test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-    async with async_session() as session:
-        yield session
-
-@pytest.fixture
-async def client(db_session):
-    async def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
+async def client():
+    test_client = AsyncMongoMockClient()
+    db = test_client["geoguard_test_db"]
+    await init_beanie(database=db, document_models=all_models)
+    
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()

@@ -1,4 +1,3 @@
-from app.core.database import Base
 from app.models.models import (
     User,
     RiskZone,
@@ -12,4 +11,5 @@ from app.models.models import (
     Alert,
     SatelliteImage,
     DamageReport,
+    all_models,
 )

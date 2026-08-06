@@ -1,9 +1,7 @@
 """
-GeoGuard AI - Chatbot API Endpoint
+GeoGuard AI - Chatbot API Endpoint (MongoDB Atlas / Beanie ODM)
 """
-from fastapi import APIRouter, Query, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
+from fastapi import APIRouter, Query
 from app.ml.nlp.disaster_chat import DisasterRAGChatbot
 
 router = APIRouter()
@@ -11,10 +9,9 @@ router = APIRouter()
 @router.get("/")
 async def chat_interaction(
     query: str = Query(..., description="User message to the assistant"),
-    lang: str = Query("en", description="Preferred response language ('en', 'ta', 'hi')"),
-    db: AsyncSession = Depends(get_db)
+    lang: str = Query("en", description="Preferred response language ('en', 'ta', 'hi')")
 ):
     """Interact with the RAG Disaster Assistant chatbot."""
-    bot = DisasterRAGChatbot(db)
+    bot = DisasterRAGChatbot()
     response = await bot.get_response(query, lang)
     return {"response": response, "query": query, "lang": lang}

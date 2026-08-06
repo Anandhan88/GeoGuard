@@ -33,7 +33,7 @@ function DashboardIndex() {
     );
   }
 
-  if (user?.role === 'authority') {
+  if (user?.role === 'authority' || user?.role === 'admin') {
     return <Navigate to="/app/authority" replace />;
   }
 

@@ -2,18 +2,14 @@ version: '3.8'
 
 services:
   db:
-    image: postgis/postgis:16-3.4
-    container_name: geoguard_db
+    image: mongo:7.0
+    container_name: geoguard_mongodb
     ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: geoguard
-      POSTGRES_PASSWORD: geoguard
-      POSTGRES_DB: geoguard_db
+      - "27017:27017"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mongodata:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U geoguard -d geoguard_db"]
+      test: ["CMD-SHELL", "mongosh --eval 'db.runCommand({ping: 1})'"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -34,7 +30,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://geoguard:geoguard@db:5432/geoguard_db
+      - MONGODB_URL=mongodb://db:27017/geoguard_db
+      - MONGODB_DB_NAME=geoguard_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       db:
@@ -60,6 +57,6 @@ services:
       - /app/node_modules
 
 volumes:
-  pgdata:
+  mongodata:
   redisdata:
   uploads_data:

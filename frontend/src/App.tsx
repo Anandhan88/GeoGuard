@@ -1,3 +1,4 @@
-import App from './App.jsx';
+// @ts-ignore
+import AppFromJsx from './App.jsx';
 
-export default App;
+export default AppFromJsx;

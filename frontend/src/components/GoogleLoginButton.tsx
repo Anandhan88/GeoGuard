@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
+import { useAppStore } from '../stores/useAppStore';
+
+interface GoogleLoginButtonProps {
+  className?: string;
+  role?: 'citizen' | 'authority';
+  onSuccess?: () => void;
+}
 
 export const GoogleLoginButton = ({
   className = '',
   role = 'citizen',
   onSuccess,
-}) => {
+}: GoogleLoginButtonProps) => {
   const { signInWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,20 +27,22 @@ export const GoogleLoginButton = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        navigate(role === 'authority' ? '/app/authority' : '/app/citizen');
+        const storeUserRole = useAppStore.getState().user?.role;
+        const isAuth = storeUserRole === 'authority' || storeUserRole === 'admin' || role === 'authority';
+        navigate(isAuth ? '/app/authority' : '/app/citizen');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google Sign In Error:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
+      if (error?.code === 'auth/popup-closed-by-user') {
         toast.error('Sign-in popup was closed before completing authentication.');
-      } else if (error.code === 'auth/network-request-failed') {
+      } else if (error?.code === 'auth/network-request-failed') {
         toast.error('Network connection issue. Please check your internet connection.');
-      } else if (error.message?.includes('requests-to-this-api') || error.message?.includes('blocked') || error.code?.includes('blocked')) {
+      } else if (error?.message?.includes('requests-to-this-api') || error?.message?.includes('blocked') || error?.code?.includes('blocked')) {
         toast.error('Firebase API key is restricted. Enable Identity Toolkit API in Google Cloud Console.', {
           duration: 5000,
         });
       } else {
-        toast.error(error.message || 'Authentication failed. Please try again.');
+        toast.error(error?.message || 'Authentication failed. Please try again.');
       }
     } finally {
       setLoading(false);

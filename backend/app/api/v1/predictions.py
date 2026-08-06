@@ -1,23 +1,18 @@
 """
-GeoGuard AI - Predictions API
-Serves flood risk predictions with XAI explanations using the database.
+GeoGuard AI - Predictions API (MongoDB Atlas / Beanie ODM)
+Serves flood risk predictions with XAI explanations using MongoDB Atlas.
 """
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List, Dict, Any
 import random
 import uuid
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
-from app.core.database import get_db
 from app.models.models import FloodPrediction, RiskZone
 
 router = APIRouter()
 
-# Center coordinates matching the frontend
 ZONE_CENTERS = {
     "zone-001": {"lat": 13.0827, "lng": 80.2707}, # Chennai Basin
     "zone-002": {"lat": 10.7905, "lng": 78.7047}, # Cauvery River Basin, Trichy
@@ -31,31 +26,35 @@ ZONE_CENTERS = {
 async def list_predictions(
     risk_level: Optional[str] = Query(None, description="Filter by risk level"),
     min_score: Optional[int] = Query(None, description="Minimum risk score"),
-    limit: int = Query(20, le=100),
-    db: AsyncSession = Depends(get_db)
+    limit: int = Query(20, le=100)
 ):
-    """List all flood predictions with optional filtering."""
-    query = select(FloodPrediction).join(FloodPrediction.zone).options(joinedload(FloodPrediction.zone))
-    
+    """List all flood predictions from MongoDB Atlas with optional filtering."""
+    query = FloodPrediction.find_all()
     if min_score is not None:
-        query = query.filter(FloodPrediction.risk_score >= min_score)
+        query = query.find(FloodPrediction.risk_score >= min_score)
         
-    if risk_level:
-        query = query.filter(RiskZone.risk_level == risk_level)
-        
-    result = await db.execute(query)
-    predictions = result.scalars().unique().all()
+    predictions = await query.limit(limit).to_list()
+    
+    # Pre-fetch zones map
+    zones = await RiskZone.find_all().to_list()
+    zone_map = {z.id: z for z in zones}
     
     response = []
     for pred in predictions:
-        affected_pop = int(pred.zone.population * (pred.risk_score / 100))
+        zone = zone_map.get(pred.zone_id)
+        if not zone:
+            continue
+            
+        if risk_level and zone.risk_level != risk_level:
+            continue
+            
+        affected_pop = int(zone.population * (pred.risk_score / 100))
         
-        # Calculate dynamic center from boundary if not in cached centers
         center = ZONE_CENTERS.get(pred.zone_id)
         if not center:
             try:
-                if pred.zone.boundary_json and pred.zone.boundary_json.get("type") == "Polygon":
-                    coords = pred.zone.boundary_json.get("coordinates", [])
+                if zone.boundary_json and zone.boundary_json.get("type") == "Polygon":
+                    coords = zone.boundary_json.get("coordinates", [])
                     if coords and len(coords[0]) > 0:
                         lats = [c[0] for c in coords[0]]
                         lngs = [c[1] for c in coords[0]]
@@ -68,13 +67,13 @@ async def list_predictions(
         response.append({
             "id": pred.id,
             "zoneId": pred.zone_id,
-            "zoneName": pred.zone.name,
+            "zoneName": zone.name,
             "riskScore": pred.risk_score,
             "probability": pred.probability,
             "confidence": pred.confidence,
             "predictedDepth": pred.predicted_depth,
             "predictedDuration": pred.predicted_duration,
-            "riskLevel": pred.zone.risk_level,
+            "riskLevel": zone.risk_level,
             "affectedPopulation": affected_pop,
             "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
             "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
@@ -82,11 +81,8 @@ async def list_predictions(
             "factors": pred.factors_json or []
         })
         
-    # Apply limit
-    response = response[:limit]
-    
     return {
-        "predictions": response,
+        "predictions": response[:limit],
         "total": len(response),
         "filters": {"risk_level": risk_level, "min_score": min_score},
     }
@@ -96,34 +92,27 @@ async def list_predictions(
 async def get_prediction_for_location(
     lat: float = Query(...),
     lng: float = Query(...),
-    name: str = Query(...),
-    db: AsyncSession = Depends(get_db)
+    name: str = Query(...)
 ):
     """Generate dynamic flood prediction based on real-time weather for any coordinate."""
     from app.ml.prediction.risk_engine import RiskEngine
-    from app.api.v1.weather import fetch_live_openmeteo
-    from datetime import datetime, timedelta
-    import random
+    from app.services.weather_service import fetch_open_meteo_weather
 
     engine = RiskEngine()
 
-    # 1. Fetch real-time weather
     try:
-        weather_data = await fetch_live_openmeteo(lat, lng)
+        weather_data = await fetch_open_meteo_weather(lat, lng)
         current = weather_data.get("current", {})
         rainfall = current.get("precipitation", 0.0)
         temp = current.get("temperature_2m", 28.0)
         humidity = current.get("relative_humidity_2m", 80.0)
     except Exception as e:
         print(f"Dynamic Predictions: Weather fetch failed: {e}")
-        # fallbacks
         rainfall = 10.0
         temp = 28.0
         humidity = 80.0
 
-    # 2. Translate rainfall to hydrologic factors dynamically
-    river_level = 1.2 + (rainfall * 0.08) + random.uniform(-0.1, 0.1)
-    river_level = min(6.0, max(0.5, river_level))
+    river_level = min(6.0, max(0.5, 1.2 + (rainfall * 0.08) + random.uniform(-0.1, 0.1)))
     soil_saturation = min(100.0, max(10.0, humidity * 0.85 + (rainfall * 1.2)))
     drainage_capacity = max(10.0, min(100.0, 95.0 - (rainfall * 1.5) - random.uniform(0, 5)))
     upstream_reservoir = min(100.0, max(30.0, 50.0 + (rainfall * 1.2) + random.uniform(-3, 5)))
@@ -140,19 +129,15 @@ async def get_prediction_for_location(
         "humidity": humidity
     }
 
-    # Run Risk Engine
     risk_result = engine.predict_risk(inputs)
 
-    # Dynamic depth/duration
     predicted_depth = round(1.2 + (rainfall * 0.02) if risk_result["risk_level"] in ["critical", "high"] else 0.1 + (rainfall * 0.01), 2)
     predicted_depth = min(3.5, max(0.0, predicted_depth))
     predicted_duration = float(random.choice([12, 24, 36, 48])) if rainfall > 5.0 else 0.0
 
-    # Dynamic baseline population mapped to risk level
     base_pop = 150000 if risk_result["risk_level"] == "low" else 300000 if risk_result["risk_level"] == "medium" else 500000
     affected_pop = int(base_pop * (risk_result["risk_score"] / 100))
 
-    # Construct top factors text explanation (XAI)
     top_factors = sorted(risk_result["factors"], key=lambda f: f.get("contribution", 0), reverse=True)[:3]
     explanation = f"Flood Risk = {int(risk_result['risk_score'])}%. "
     if len(top_factors) >= 2:
@@ -188,16 +173,18 @@ async def get_prediction_for_location(
 
 
 @router.get("/{prediction_id}")
-async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db)):
+async def get_prediction(prediction_id: str):
     """Get detailed prediction with XAI factors."""
-    query = select(FloodPrediction).options(joinedload(FloodPrediction.zone)).filter(FloodPrediction.id == prediction_id)
-    result = await db.execute(query)
-    pred = result.scalars().first()
+    pred = await FloodPrediction.find_one(FloodPrediction.id == prediction_id)
     if not pred:
         return {"error": "Prediction not found"}
         
+    zone = await RiskZone.find_one(RiskZone.id == pred.zone_id)
+    zone_name = zone.name if zone else "Unknown Zone"
+    risk_level = zone.risk_level if zone else "medium"
+    population = zone.population if zone else 100000
+    
     factors = pred.factors_json or []
-    # Generate XAI explanation
     top_factors = sorted(factors, key=lambda f: f.get("contribution", 0), reverse=True)[:3]
     explanation = f"Flood Risk = {int(pred.risk_score)}%. "
     if len(top_factors) >= 2:
@@ -207,33 +194,32 @@ async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db))
         explanation += f"(contributing {top_factors[1]['contribution']}%). "
     explanation += f"Model confidence is {int(pred.confidence * 100)}% based on 847 similar historical events."
     
-    affected_pop = int(pred.zone.population * (pred.risk_score / 100))
+    affected_pop = int(population * (pred.risk_score / 100))
     
-    # Calculate dynamic center from boundary if not in cached centers
     center = ZONE_CENTERS.get(pred.zone_id)
-    if not center:
+    if not center and zone:
         try:
-            if pred.zone.boundary_json and pred.zone.boundary_json.get("type") == "Polygon":
-                coords = pred.zone.boundary_json.get("coordinates", [])
+            if zone.boundary_json and zone.boundary_json.get("type") == "Polygon":
+                coords = zone.boundary_json.get("coordinates", [])
                 if coords and len(coords[0]) > 0:
                     lats = [c[0] for c in coords[0]]
                     lngs = [c[1] for c in coords[0]]
                     center = {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)}
         except Exception:
             pass
-        if not center:
-            center = {"lat": 13.0500, "lng": 80.2200}
+    if not center:
+        center = {"lat": 13.0500, "lng": 80.2200}
 
     return {
         "id": pred.id,
         "zoneId": pred.zone_id,
-        "zoneName": pred.zone.name,
+        "zoneName": zone_name,
         "riskScore": pred.risk_score,
         "probability": pred.probability,
         "confidence": pred.confidence,
         "predictedDepth": pred.predicted_depth,
         "predictedDuration": pred.predicted_duration,
-        "riskLevel": pred.zone.risk_level,
+        "riskLevel": risk_level,
         "affectedPopulation": affected_pop,
         "predictedFor": pred.predicted_for.isoformat() + "Z" if pred.predicted_for else None,
         "generatedAt": pred.generated_at.isoformat() + "Z" if pred.generated_at else None,
@@ -250,17 +236,14 @@ async def get_prediction(prediction_id: str, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/heatmap/data")
-async def get_heatmap_data(db: AsyncSession = Depends(get_db)):
+async def get_heatmap_data():
     """Get risk heatmap data as GeoJSON points."""
-    query = select(FloodPrediction)
-    result = await db.execute(query)
-    predictions = result.scalars().all()
+    predictions = await FloodPrediction.find_all().to_list()
     
     points = []
     for pred in predictions:
         center = ZONE_CENTERS.get(pred.zone_id, {"lat": 13.0500, "lng": 80.2200})
         intensity = pred.risk_score / 100
-        # Generate surrounding points for heat effect
         for _ in range(5):
             points.append({
                 "lat": center["lat"] + random.uniform(-0.01, 0.01),
@@ -272,52 +255,35 @@ async def get_heatmap_data(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/generate")
-async def generate_predictions(db: AsyncSession = Depends(get_db)):
-    """Trigger prediction pipeline, executing ML model inference with live weather for all zones."""
+async def generate_predictions():
+    """Trigger prediction pipeline, executing ML model inference with live weather for all zones in MongoDB Atlas."""
     from app.ml.prediction.risk_engine import RiskEngine
-    from app.api.v1.weather import fetch_live_openmeteo, map_wmo_code
-    from datetime import datetime, timedelta
+    from app.services.weather_service import fetch_open_meteo_weather
     
     engine = RiskEngine()
-    
-    # Get all zones
-    zones_result = await db.execute(select(RiskZone))
-    zones = zones_result.scalars().all()
+    zones = await RiskZone.find_all().to_list()
     
     predictions_generated = []
     
     for zone in zones:
         coords = ZONE_CENTERS.get(zone.id, {"lat": 13.0827, "lng": 80.2707})
         
-        # 1. Fetch real-time weather
         try:
-            weather_data = await fetch_live_openmeteo(coords["lat"], coords["lng"])
+            weather_data = await fetch_open_meteo_weather(coords["lat"], coords["lng"])
             current = weather_data.get("current", {})
             rainfall = current.get("precipitation", 0.0)
             temp = current.get("temperature_2m", 28.0)
             humidity = current.get("relative_humidity_2m", 80.0)
         except Exception as e:
             print(f"Predictions Pipeline: Weather fetch failed for {zone.name}: {e}")
-            # fallbacks
             rainfall = 25.0 if zone.risk_level == "critical" else 5.0
             temp = 28.0
             humidity = 85.0
             
-        # 2. Translate rainfall to hydrologic factors dynamically
-        # River level rises with heavy rain
-        river_level = 1.8 + (rainfall * 0.08) + random.uniform(-0.1, 0.2)
-        river_level = min(6.0, max(0.5, river_level))
-        
-        # Soil saturation rises with rain and high humidity
+        river_level = min(6.0, max(0.5, 1.8 + (rainfall * 0.08) + random.uniform(-0.1, 0.2)))
         soil_saturation = min(100.0, max(10.0, humidity * 0.8 + (rainfall * 1.5)))
-        
-        # Drainage capacity drops when flooded (high rain)
         drainage_capacity = max(10.0, min(100.0, 90.0 - (rainfall * 1.8) - random.uniform(0, 10)))
-        
-        # Upstream reservoirs fill up with precipitation
         upstream_reservoir = min(100.0, max(30.0, 55.0 + (rainfall * 1.5) + random.uniform(-5, 10)))
-        
-        # Coast/tide considerations
         tide_level = 0.5 + (0.8 if "Chennai" in zone.name else 0.0) + random.uniform(-0.2, 0.4)
         
         inputs = {
@@ -331,23 +297,16 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
             "humidity": humidity
         }
         
-        # Run Risk Engine
         risk_result = engine.predict_risk(inputs)
         
-        # Update zone's risk level in db
         zone.risk_level = risk_result["risk_level"]
+        await zone.save()
         
-        # Calculate dynamic depth and duration
         predicted_depth = round(1.2 + (rainfall * 0.02) if zone.risk_level in ["critical", "high"] else 0.1 + (rainfall * 0.01), 2)
         predicted_depth = min(3.5, max(0.0, predicted_depth))
         predicted_duration = float(random.choice([12, 24, 36, 48, 72])) if rainfall > 5.0 else 0.0
         
-        # Check if prediction already exists for this zone
-        pred_result = await db.execute(
-            select(FloodPrediction).filter(FloodPrediction.zone_id == zone.id)
-        )
-        pred = pred_result.scalars().first()
-        
+        pred = await FloodPrediction.find_one(FloodPrediction.zone_id == zone.id)
         if not pred:
             pred = FloodPrediction(
                 zone_id=zone.id,
@@ -360,7 +319,7 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
                 predicted_for=datetime.utcnow() + timedelta(days=1),
                 generated_at=datetime.utcnow()
             )
-            db.add(pred)
+            await pred.insert()
         else:
             pred.risk_score = risk_result["risk_score"]
             pred.probability = risk_result["probability"]
@@ -370,6 +329,7 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
             pred.predicted_duration = predicted_duration
             pred.predicted_for = datetime.utcnow() + timedelta(days=1)
             pred.generated_at = datetime.utcnow()
+            await pred.save()
             
         predictions_generated.append({
             "zone_id": zone.id,
@@ -378,8 +338,6 @@ async def generate_predictions(db: AsyncSession = Depends(get_db)):
             "risk_level": zone.risk_level
         })
         
-    await db.commit()
-    
     return {
         "status": "success",
         "message": f"Successfully ran predictions pipeline. Updated {len(predictions_generated)} zones.",
@@ -401,11 +359,9 @@ class RiskZoneCreateRequest(BaseModel):
 
 @router.post("/zone")
 async def create_risk_zone(
-    request: RiskZoneCreateRequest,
-    db: AsyncSession = Depends(get_db)
+    request: RiskZoneCreateRequest
 ):
-    """Create a custom risk zone and matching flood prediction (authority only)."""
-    # 1. Create RiskZone
+    """Create a custom risk zone and matching flood prediction in MongoDB Atlas."""
     zone_id = f"zone-{str(uuid.uuid4())[:8]}"
     half = 0.015
     boundary = {
@@ -427,9 +383,8 @@ async def create_risk_zone(
         vulnerability_score=request.vulnerability_score,
         boundary_json=boundary
     )
-    db.add(new_zone)
+    await new_zone.insert()
     
-    # 2. Create FloodPrediction
     factors = [
         {"name": "Elevation Risk", "value": 2.5, "unit": "m ASL", "contribution": 35, "trend": "stable", "threshold": 5.0, "description": "Low-lying area marked by authority"},
         {"name": "Authority Override", "value": 1.0, "unit": "status", "contribution": 65, "trend": "increasing", "threshold": 0.5, "description": f"Zone marked as {request.risk_level} risk by command center"}
@@ -447,10 +402,8 @@ async def create_risk_zone(
         predicted_for=datetime.utcnow() + timedelta(days=1),
         generated_at=datetime.utcnow()
     )
-    db.add(new_pred)
-    await db.commit()
+    await new_pred.insert()
     
-    # Cache the center coordinate mapping in memory
     ZONE_CENTERS[zone_id] = {"lat": request.latitude, "lng": request.longitude}
     
     return {

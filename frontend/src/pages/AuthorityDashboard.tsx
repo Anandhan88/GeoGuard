@@ -39,7 +39,7 @@ export default function AuthorityDashboard() {
     fetchStats();
   }, []);
 
-  if (user && user.role !== 'authority' && user.role !== 'admin') {
+  if (!user || (user.role !== 'authority' && user.role !== 'admin')) {
     return <Navigate to="/app/citizen" replace />;
   }
 

@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://geoguard:geoguard@localhost:5432/geoguard_db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./geoguard.db"
+    MONGODB_URL: str = "mongodb://localhost:27017/geoguard_db"
+    MONGODB_DB_NAME: str = "geoguard_db"
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"

@@ -30,7 +30,7 @@ const navItems = [
   { label: 'Authority View', translationKey: 'authority_view', icon: Shield, path: '/app/authority', section: 'main', roles: ['authority', 'admin'] },
   { label: 'Predictions', translationKey: 'top_predictions', icon: Activity, path: '/app/citizen', section: 'intelligence' },
   { label: 'Satellite', translationKey: 'satellite_imagery', icon: Satellite, path: '/app/satellite', section: 'intelligence' },
-  { label: 'Weather', translationKey: 'weather_analysis', icon: Cloud, path: '/app/weather', section: 'intelligence' },
+  { label: 'Weather Forecasts', translationKey: 'weather_analysis', icon: Cloud, path: '/app/weather', section: 'intelligence' },
   { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority', section: 'intelligence', roles: ['authority', 'admin'] },
   { label: 'Evacuation', translationKey: 'evacuation_routes', icon: Navigation, path: '/app/evacuation', section: 'response' },
   { label: 'Shelters', translationKey: 'shelters_active', icon: Building, path: '/app/shelters', section: 'response' },
@@ -90,7 +90,7 @@ export default function Sidebar() {
               )}
               {items.map((item) => {
                 const resolvedPath = ['Overview', 'Predictions', 'Settings', 'Help'].includes(item.label)
-                  ? (role === 'authority' ? '/app/authority' : '/app/citizen')
+                  ? (role === 'authority' || role === 'admin' ? '/app/authority' : '/app/citizen')
                   : item.path;
                 const isActive = location.pathname === resolvedPath;
                 const Icon = item.icon;

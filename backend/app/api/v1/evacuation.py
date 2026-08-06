@@ -1,12 +1,9 @@
 """
-GeoGuard AI - Evacuation Routes API
+GeoGuard AI - Evacuation Routes API (MongoDB Atlas / Beanie ODM)
 """
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.models.models import Shelter
 from app.services.routing_service import OSMRouter, haversine
 
@@ -16,20 +13,17 @@ router = APIRouter()
 @router.get("/routes")
 async def list_evacuation_routes(
     origin_lat: float = Query(..., description="Origin latitude"),
-    origin_lng: float = Query(..., description="Origin longitude"),
-    db: AsyncSession = Depends(get_db)
+    origin_lng: float = Query(..., description="Origin longitude")
 ):
-    """List recommended evacuation routes to the top 2 nearest shelters."""
-    result = await db.execute(select(Shelter))
-    shelters = result.scalars().all()
+    """List recommended evacuation routes to the top 2 nearest shelters in MongoDB Atlas."""
+    shelters = await Shelter.find_all().to_list()
     if not shelters:
         return {"routes": [], "total": 0}
 
-    # Sort shelters by distance
     shelter_distances = []
     for s in shelters:
-        s_lat = s.latitude if hasattr(s, 'latitude') and s.latitude is not None else 13.0
-        s_lng = s.longitude if hasattr(s, 'longitude') and s.longitude is not None else 80.0
+        s_lat = s.latitude if s.latitude is not None else 13.0
+        s_lng = s.longitude if s.longitude is not None else 80.0
         dist = haversine(origin_lat, origin_lng, s_lat, s_lng)
         shelter_distances.append((dist, s))
         
@@ -37,11 +31,11 @@ async def list_evacuation_routes(
     top_shelters = shelter_distances[:2]
     
     routes = []
-    router_service = OSMRouter(db)
+    router_service = OSMRouter()
     
     for i, (dist, shelter) in enumerate(top_shelters):
-        s_lat = shelter.latitude if hasattr(shelter, 'latitude') and shelter.latitude is not None else 13.0
-        s_lng = shelter.longitude if hasattr(shelter, 'longitude') and shelter.longitude is not None else 80.0
+        s_lat = shelter.latitude if shelter.latitude is not None else 13.0
+        s_lng = shelter.longitude if shelter.longitude is not None else 80.0
         try:
             route = await router_service.generate_safe_route(
                 (origin_lat, origin_lng), 
@@ -65,8 +59,7 @@ async def generate_route(
     origin_lng: float,
     destination_lat: Optional[float] = None,
     destination_lng: Optional[float] = None,
-    algorithm: str = Query("A*", description="A* or Dijkstra"),
-    db: AsyncSession = Depends(get_db)
+    algorithm: str = Query("A*", description="A* or Dijkstra")
 ):
     """Generate an evacuation route from origin to nearest shelter or custom destination."""
     dest_lat = destination_lat
@@ -74,9 +67,7 @@ async def generate_route(
     shelter_name = "Custom Destination"
     
     if dest_lat is None or dest_lng is None:
-        # Query nearest shelter
-        result = await db.execute(select(Shelter))
-        shelters = result.scalars().all()
+        shelters = await Shelter.find_all().to_list()
         if not shelters:
             raise HTTPException(status_code=404, detail="No shelters found in database")
             
@@ -84,8 +75,8 @@ async def generate_route(
         min_dist = float("inf")
         
         for s in shelters:
-            s_lat = s.latitude if hasattr(s, 'latitude') and s.latitude is not None else 13.0
-            s_lng = s.longitude if hasattr(s, 'longitude') and s.longitude is not None else 80.0
+            s_lat = s.latitude if s.latitude is not None else 13.0
+            s_lng = s.longitude if s.longitude is not None else 80.0
             d = haversine(origin_lat, origin_lng, s_lat, s_lng)
             if d < min_dist:
                 min_dist = d
@@ -98,7 +89,7 @@ async def generate_route(
         dest_lng = closest_shelter.longitude
         shelter_name = closest_shelter.name
         
-    router_service = OSMRouter(db)
+    router_service = OSMRouter()
     
     try:
         route = await router_service.generate_safe_route(
@@ -114,15 +105,11 @@ async def generate_route(
 
 @router.get("/routes/{route_id}/risk")
 async def get_route_risk(
-    route_id: str,
-    db: AsyncSession = Depends(get_db)
+    route_id: str
 ):
     """Get detailed risk segment breakdown along a specific route coordinate."""
-    # Split the route-id back to shelter ID
     shelter_id = route_id.replace("route-", "")
-    query = select(Shelter).filter(Shelter.id == shelter_id)
-    result = await db.execute(query)
-    shelter = result.scalars().first()
+    shelter = await Shelter.find_one(Shelter.id == shelter_id)
     if not shelter:
         return {"error": "Shelter/Route not found"}
         

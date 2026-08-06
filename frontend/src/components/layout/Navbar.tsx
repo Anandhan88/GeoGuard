@@ -99,9 +99,9 @@ export default function Navbar() {
     .sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
 
   const currentUser = user || {
-    name: 'Anandhan S',
-    role: 'authority',
-    email: 'anandhan@geoguard.ai',
+    name: 'Citizen User',
+    role: 'citizen',
+    email: 'citizen@geoguard.ai',
     phone: '',
     languagePref: 'en',
   };

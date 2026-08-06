@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -24,7 +24,7 @@ import {
   Layers, Eye, EyeOff, Navigation, Building, MapPin,
   Droplets, Users, Clock, X, Maximize2, Minimize2,
   Activity, Zap, RefreshCw, Search, LocateFixed, Satellite,
-  Shield, AlertTriangle,
+  Shield, AlertTriangle, Cloud,
 } from 'lucide-react';
 import { getRiskColor, getRiskBadgeClass, formatNumber } from '../utils/helpers';
 import { useAppStore } from '../stores/useAppStore';
@@ -821,16 +821,42 @@ export default function MapView() {
     vulnerabilityScore: 70
   });
 
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    if (!placementMode) return;
-    setPlacementCoords({ lat, lng });
-    if (placementMode === 'shelter') {
-      setShelterForm(f => ({ ...f, address: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }));
-      setShowShelterModal(true);
-    } else if (placementMode === 'zone') {
-      setShowZoneModal(true);
+  const [mapWeatherPos, setMapWeatherPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapWeatherPopup, setMapWeatherPopup] = useState<any>(null);
+  const [mapWeatherLoading, setMapWeatherLoading] = useState<boolean>(false);
+
+  const fetchMapWeatherClick = useCallback(async (lat: number, lng: number) => {
+    setMapWeatherPos({ lat, lng });
+    setMapWeatherLoading(true);
+    try {
+      const [currRes, foreRes] = await Promise.all([
+        api.get(`/weather/current?lat=${lat}&lon=${lng}`),
+        api.get(`/weather/forecast?lat=${lat}&lon=${lng}`),
+      ]);
+      setMapWeatherPopup({
+        current: currRes.data,
+        forecast: foreRes.data,
+      });
+    } catch (err) {
+      console.error("Failed to fetch weather for clicked location:", err);
+    } finally {
+      setMapWeatherLoading(false);
     }
-  }, [placementMode]);
+  }, []);
+
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    if (placementMode) {
+      setPlacementCoords({ lat, lng });
+      if (placementMode === 'shelter') {
+        setShelterForm(f => ({ ...f, address: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}` }));
+        setShowShelterModal(true);
+      } else if (placementMode === 'zone') {
+        setShowZoneModal(true);
+      }
+    } else {
+      fetchMapWeatherClick(lat, lng);
+    }
+  }, [placementMode, fetchMapWeatherClick]);
 
   const handleCreateShelter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1125,6 +1151,95 @@ export default function MapView() {
                   <p className="font-bold mb-1">{searchMarker.name}</p>
                   <p className="text-slate-400">Lat: {searchMarker.lat.toFixed(4)}</p>
                   <p className="text-slate-400">Lng: {searchMarker.lng.toFixed(4)}</p>
+                </div>
+              </LeafletPopup>
+            </LeafletMarker>
+          )}
+
+          {/* Map Click Weather Marker & Popup */}
+          {mapWeatherPos && (
+            <LeafletMarker position={[mapWeatherPos.lat, mapWeatherPos.lng]} icon={searchMarkerIcon}>
+              <LeafletPopup>
+                <div className="bg-slate-950 text-white p-3 rounded-xl text-xs min-w-[240px] border border-blue-500/30 shadow-2xl font-sans space-y-2">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                    <span className="font-bold text-sm text-blue-400 flex items-center gap-1">
+                      <Cloud size={14} /> Location Weather
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {mapWeatherPos.lat.toFixed(3)}, {mapWeatherPos.lng.toFixed(3)}
+                    </span>
+                  </div>
+
+                  {mapWeatherLoading ? (
+                    <div className="py-3 text-center text-slate-400 flex items-center justify-center gap-2">
+                      <RefreshCw size={14} className="animate-spin text-cyan-400" /> Fetching Open-Meteo data...
+                    </div>
+                  ) : mapWeatherPopup?.current ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-2xl font-extrabold text-white">
+                            {mapWeatherPopup.current.temperature}°C
+                          </div>
+                          <p className="text-[11px] text-slate-300 font-medium">
+                            {mapWeatherPopup.current.condition}
+                          </p>
+                        </div>
+                        <span className="text-3xl">{mapWeatherPopup.current.icon}</span>
+                      </div>
+
+                      {/* Flood Risk Badge */}
+                      <div className="p-2 rounded-lg bg-slate-900 border border-white/10 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400">Flood Risk:</span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                          mapWeatherPopup.current.flood_risk?.level === 'Severe Risk' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                          mapWeatherPopup.current.flood_risk?.level === 'High Risk' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' :
+                          mapWeatherPopup.current.flood_risk?.level === 'Moderate Risk' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                          'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}>
+                          {mapWeatherPopup.current.flood_risk?.level || 'Low Risk'} ({mapWeatherPopup.current.flood_risk?.score || 0}%)
+                        </span>
+                      </div>
+
+                      {/* Key Weather Metrics */}
+                      <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                        <div className="bg-white/5 p-1.5 rounded flex justify-between">
+                          <span className="text-slate-400">Rain Prob:</span>
+                          <span className="font-semibold text-cyan-400">{mapWeatherPopup.current.precipitation_probability}%</span>
+                        </div>
+                        <div className="bg-white/5 p-1.5 rounded flex justify-between">
+                          <span className="text-slate-400">Wind:</span>
+                          <span className="font-semibold text-slate-200">{mapWeatherPopup.current.wind_speed} km/h</span>
+                        </div>
+                        <div className="bg-white/5 p-1.5 rounded flex justify-between">
+                          <span className="text-slate-400">Humidity:</span>
+                          <span className="font-semibold text-amber-400">{mapWeatherPopup.current.humidity}%</span>
+                        </div>
+                        <div className="bg-white/5 p-1.5 rounded flex justify-between">
+                          <span className="text-slate-400">Rainfall:</span>
+                          <span className="font-semibold text-blue-400">{mapWeatherPopup.current.rain} mm</span>
+                        </div>
+                      </div>
+
+                      {/* Forecast Summary */}
+                      {mapWeatherPopup.forecast?.daily && (
+                        <div className="border-t border-white/10 pt-2 text-[10px] space-y-1">
+                          <p className="text-slate-400 font-semibold">3-Day Forecast Summary:</p>
+                          <div className="grid grid-cols-3 gap-1">
+                            {mapWeatherPopup.forecast.daily.slice(0, 3).map((d: any, i: number) => (
+                              <div key={i} className="bg-white/[0.03] p-1 rounded text-center">
+                                <p className="text-slate-400">{d.date.slice(5)}</p>
+                                <p className="text-xs font-bold text-white">{d.temp_max}°</p>
+                                <p className="text-[9px] text-blue-400">{d.rainfall}mm</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-slate-400 text-center py-2">No weather data</p>
+                  )}
                 </div>
               </LeafletPopup>
             </LeafletMarker>

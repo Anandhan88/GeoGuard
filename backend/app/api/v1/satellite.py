@@ -1,13 +1,10 @@
 """
-GeoGuard AI - Satellite Imagery API
+GeoGuard AI - Satellite Imagery API (MongoDB Atlas / Beanie ODM)
 Exposes endpoints to list processed satellite images, check background analysis status, and trigger runs.
 """
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, HTTPException
 from typing import List
 
-from app.core.database import get_db
 from app.models.models import SatelliteImage
 from app.schemas.schemas import SatelliteImageResponse
 from services.satellite import satellite_manager
@@ -17,13 +14,10 @@ router = APIRouter()
 
 @router.get("/", response_model=List[SatelliteImageResponse])
 async def list_satellite_images(
-    limit: int = Query(10, le=50),
-    db: AsyncSession = Depends(get_db)
+    limit: int = Query(10, le=50)
 ):
-    """Retrieve history of processed satellite images."""
-    query = select(SatelliteImage).order_by(SatelliteImage.capture_date.desc()).limit(limit)
-    result = await db.execute(query)
-    images = result.scalars().all()
+    """Retrieve history of processed satellite images from MongoDB Atlas."""
+    images = await SatelliteImage.find_all().sort(-SatelliteImage.capture_date).limit(limit).to_list()
     return images
 
 
@@ -39,7 +33,6 @@ async def trigger_satellite_analysis(
     lng: float = Query(80.2707)
 ):
     """Manually trigger background search, download, and processing of latest satellite imagery."""
-    # Check if a pipeline is already running to avoid conflict
     current_status = satellite_manager.get_status()
     if current_status.get("status") in ["Searching", "Downloading", "Processing"]:
         raise HTTPException(

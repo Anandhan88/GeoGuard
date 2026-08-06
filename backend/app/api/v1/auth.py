@@ -1,14 +1,11 @@
 """
 GeoGuard AI - Authentication API
-Now integrated with SQLAlchemy async database operations.
+Integrated with MongoDB Atlas / Beanie ODM database operations.
 """
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
 from app.models.models import User
 from app.core.security import (
     hash_password, verify_password, create_access_token,
@@ -34,6 +31,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleAuthRequest(BaseModel):
+    email: EmailStr
+    name: str
+    role: str = "citizen"
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -41,74 +44,33 @@ class TokenResponse(BaseModel):
     user: dict
 
 
-# Seed function to ensure demo users exist
-async def seed_demo_users(db: AsyncSession):
-    """Seed demo accounts if they do not exist in the database."""
-    # Seed citizen
-    result = await db.execute(select(User).filter(User.email == "citizen@demo.com"))
-    citizen = result.scalars().first()
-    if not citizen:
-        new_citizen = User(
-            id="demo-citizen",
-            email="citizen@demo.com",
-            name="Rajesh Kumar",
-            role="citizen",
-            hashed_password=hash_password("demo123"),
-            phone="+91-9876543210",
-            language_pref="en",
-        )
-        db.add(new_citizen)
-
-    # Seed authority
-    result = await db.execute(select(User).filter(User.email == "authority@demo.com"))
-    authority = result.scalars().first()
-    if not authority:
-        new_authority = User(
-            id="demo-authority",
-            email="authority@demo.com",
-            name="Dr. Priya IAS",
-            role="authority",
-            hashed_password=hash_password("demo123"),
-            phone="+91-9876543211",
-            language_pref="en",
-        )
-        db.add(new_authority)
-
-    try:
-        await db.commit()
-    except Exception:
-        await db.rollback()
+ADMIN_EMAILS = ["anand.settu2006@gmail.com"]
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Register a new user in the database."""
-    # Check if email exists
-    result = await db.execute(select(User).filter(User.email == request.email))
-    existing_user = result.scalars().first()
+async def register(request: RegisterRequest):
+    """Register a new user in MongoDB Atlas."""
+    existing_user = await User.find_one(User.email == request.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
 
-    # Create new user
+    assigned_role = "admin" if request.email.lower() in ADMIN_EMAILS else request.role
+
     user = User(
         email=request.email,
         name=request.name,
-        role=request.role,
+        role=assigned_role,
         hashed_password=hash_password(request.password),
         phone=request.phone,
         language_pref=request.language_pref,
+        latitude=request.latitude,
+        longitude=request.longitude,
     )
-    # Set coordinates if SQLite, or geography if PostGIS
-    if hasattr(user, 'latitude'):
-        user.latitude = request.latitude
-        user.longitude = request.longitude
 
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    await user.insert()
 
     access_token = create_access_token({"sub": user.id, "role": user.role})
     refresh_token = create_refresh_token({"sub": user.id, "role": user.role})
@@ -121,16 +83,47 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: LoginRequest):
     """Login with email and password."""
-    result = await db.execute(select(User).filter(User.email == request.email))
-    user = result.scalars().first()
+    user = await User.find_one(User.email == request.email)
 
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+
+    if request.email.lower() in ADMIN_EMAILS and user.role != "admin":
+        user.role = "admin"
+        await user.save()
+
+    access_token = create_access_token({"sub": user.id, "role": user.role})
+    refresh_token = create_refresh_token({"sub": user.id, "role": user.role})
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user={"id": user.id, "email": user.email, "name": user.name, "role": user.role},
+    )
+
+
+@router.post("/google", response_model=TokenResponse)
+async def google_auth(request: GoogleAuthRequest):
+    """Authenticate or register user via Google Sign-In."""
+    user = await User.find_one(User.email == request.email)
+    assigned_role = "admin" if request.email.lower() in ADMIN_EMAILS else request.role
+
+    if not user:
+        user = User(
+            email=request.email,
+            name=request.name,
+            role=assigned_role,
+            hashed_password=hash_password("google_sso_authenticated"),
+        )
+        await user.insert()
+    elif request.email.lower() in ADMIN_EMAILS and user.role != "admin":
+        user.role = "admin"
+        await user.save()
 
     access_token = create_access_token({"sub": user.id, "role": user.role})
     refresh_token = create_refresh_token({"sub": user.id, "role": user.role})
@@ -144,27 +137,27 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me")
 async def get_current_user_profile(
-    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Get current user's profile from database."""
-    result = await db.execute(select(User).filter(User.id == current_user["id"]))
-    user = result.scalars().first()
+    """Get current user's profile from MongoDB Atlas."""
+    user = await User.find_one(User.id == current_user["id"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    response_data = {
+    if user.email.lower() in ADMIN_EMAILS and user.role != "admin":
+        user.role = "admin"
+        await user.save()
+
+    return {
         "id": user.id,
         "email": user.email,
         "name": user.name,
         "role": user.role,
         "phone": user.phone,
         "language_pref": user.language_pref,
+        "latitude": user.latitude,
+        "longitude": user.longitude,
     }
-    if hasattr(user, 'latitude'):
-        response_data["latitude"] = user.latitude
-        response_data["longitude"] = user.longitude
-
-    return response_data
 
 
 class UpdateProfileRequest(BaseModel):
@@ -176,12 +169,10 @@ class UpdateProfileRequest(BaseModel):
 @router.put("/me", status_code=200)
 async def update_profile(
     request: UpdateProfileRequest,
-    current_user: dict = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Update current user's profile info in database."""
-    result = await db.execute(select(User).filter(User.id == current_user["id"]))
-    user = result.scalars().first()
+    """Update current user's profile info in MongoDB Atlas."""
+    user = await User.find_one(User.id == current_user["id"])
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -194,22 +185,18 @@ async def update_profile(
             raise HTTPException(status_code=400, detail="Invalid language preference. Must be 'en', 'ta', or 'hi'")
         user.language_pref = request.language_pref
 
-    await db.commit()
-    await db.refresh(user)
+    await user.save()
 
-    response_data = {
+    return {
         "id": user.id,
         "email": user.email,
         "name": user.name,
         "role": user.role,
         "phone": user.phone,
-        "language_pref": user.language_pref
+        "language_pref": user.language_pref,
+        "latitude": user.latitude,
+        "longitude": user.longitude,
     }
-    if hasattr(user, 'latitude'):
-        response_data["latitude"] = user.latitude
-        response_data["longitude"] = user.longitude
-
-    return response_data
 
 
 @router.post("/refresh")

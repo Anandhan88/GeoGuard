@@ -61,7 +61,11 @@ interface AppState {
 
   // Weather
   weather: WeatherData | null;
+  currentWeather: any | null;
+  weatherForecast: any | null;
   fetchWeather: () => Promise<void>;
+  fetchCurrentWeather: (lat?: number, lon?: number) => Promise<any>;
+  fetchWeatherForecast: (lat?: number, lon?: number) => Promise<any>;
 
   // Evacuation
   evacuationRoutes: EvacuationRoute[];
@@ -244,17 +248,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     const loc = get().selectedLocation;
     if (!loc) return;
     set({ isLoading: true });
-    await Promise.all([
-      get().fetchWeather(),
-      get().fetchPredictions(),
-      get().fetchAlerts(),
-      get().fetchShelters(),
-      get().fetchReports(),
-      get().fetchEvacuationRoutes(loc.lat, loc.lng),
-      get().fetchSatelliteImages(),
-      get().fetchSatelliteStatus(),
-    ]);
-    await get().fetchStats();
+    try {
+      await Promise.allSettled([
+        get().fetchWeather(),
+        get().fetchPredictions(),
+        get().fetchAlerts(),
+        get().fetchShelters(),
+        get().fetchReports(),
+        get().fetchEvacuationRoutes(loc.lat, loc.lng),
+        get().fetchSatelliteImages(),
+        get().fetchSatelliteStatus(),
+      ]);
+      await get().fetchStats().catch(() => {});
+    } catch (e) {
+      console.error('fetchLocationData error:', e);
+    }
     set({ isLoading: false });
   },
 
@@ -394,16 +402,47 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Weather — null by default, fetched for selected location
+  // Weather
   weather: null,
+  currentWeather: null,
+  weatherForecast: null,
+
   fetchWeather: async () => {
     const loc = get().selectedLocation;
     if (!loc) { set({ weather: null }); return; }
     try {
-      const res = await api.get(`/weather/current?lat=${loc.lat}&lng=${loc.lng}`);
-      set({ weather: res.data });
+      const res = await api.get(`/weather/current?lat=${loc.lat}&lon=${loc.lng}`);
+      set({ weather: res.data, currentWeather: res.data });
     } catch {
       set({ weather: null });
+    }
+  },
+
+  fetchCurrentWeather: async (lat?: number, lon?: number) => {
+    const loc = get().selectedLocation;
+    const targetLat = lat ?? loc?.lat ?? 13.0827;
+    const targetLon = lon ?? loc?.lng ?? 80.2707;
+    try {
+      const res = await api.get(`/weather/current?lat=${targetLat}&lon=${targetLon}`);
+      set({ currentWeather: res.data, weather: res.data });
+      return res.data;
+    } catch (err) {
+      console.error('Failed to fetch current weather:', err);
+      return null;
+    }
+  },
+
+  fetchWeatherForecast: async (lat?: number, lon?: number) => {
+    const loc = get().selectedLocation;
+    const targetLat = lat ?? loc?.lat ?? 13.0827;
+    const targetLon = lon ?? loc?.lng ?? 80.2707;
+    try {
+      const res = await api.get(`/weather/forecast?lat=${targetLat}&lon=${targetLon}`);
+      set({ weatherForecast: res.data });
+      return res.data;
+    } catch (err) {
+      console.error('Failed to fetch weather forecast:', err);
+      return null;
     }
   },
 

@@ -51,7 +51,8 @@ export default function Login() {
   useEffect(() => {
     if (!loading && (firebaseUser || (isAuthenticated && storeUser))) {
       const targetRole = storeUser?.role || (activePortal === 'authority' ? 'authority' : 'citizen');
-      navigate(targetRole === 'authority' ? '/app/authority' : '/app/citizen', { replace: true });
+      const isAuth = targetRole === 'authority' || targetRole === 'admin';
+      navigate(isAuth ? '/app/authority' : '/app/citizen', { replace: true });
     }
   }, [firebaseUser, isAuthenticated, storeUser, loading, navigate, activePortal]);
 
@@ -70,7 +71,10 @@ export default function Login() {
         }
         await storeSignUp(email, password, name, activePortal);
       }
-      navigate(activePortal === 'authority' ? '/app/authority' : '/app/citizen');
+      const currentUser = useAppStore.getState().user;
+      const userRole = currentUser?.role || (activePortal === 'authority' ? 'authority' : 'citizen');
+      const isAuth = userRole === 'authority' || userRole === 'admin';
+      navigate(isAuth ? '/app/authority' : '/app/citizen');
     } catch (err) {
       setErrorMsg(err.message || 'Authentication failed');
     } finally {

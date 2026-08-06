@@ -3,8 +3,7 @@ from unittest.mock import patch
 from app.models.models import Shelter
 
 @pytest.mark.asyncio
-async def test_get_evacuation_routes(client, db_session):
-    # Seed top 2 shelters
+async def test_get_evacuation_routes(client):
     shelter1 = Shelter(
         id="001",
         name="Anna University Convention Centre",
@@ -23,9 +22,8 @@ async def test_get_evacuation_routes(client, db_session):
         current_occupancy=245,
         address="Chennai"
     )
-    db_session.add(shelter1)
-    db_session.add(shelter2)
-    await db_session.commit()
+    await shelter1.insert()
+    await shelter2.insert()
 
     params = {
         "origin_lat": 12.9815,
@@ -33,7 +31,6 @@ async def test_get_evacuation_routes(client, db_session):
     }
     
     with patch("app.services.routing_service.OSMRouter.generate_safe_route") as mock_route:
-        # Mock generate_safe_route to return route data depending on the destination coordinates
         async def side_effect(origin, destination, algorithm="A*"):
             if destination == (13.0127, 80.2352):
                 return {
@@ -68,16 +65,14 @@ async def test_get_evacuation_routes(client, db_session):
         assert "total" in data
         assert len(data["routes"]) == 2
         
-        # Check that Route 2 has the updated coordinates
         route2 = next((r for r in data["routes"] if r["id"] == "route-002"), None)
         assert route2 is not None
         assert route2["origin"] == {"lat": 12.9815, "lng": 80.2180}
         assert route2["destination"] == {"lat": 13.0300, "lng": 80.2400}
-        # First waypoint should be Phoenix Marketcity area
         assert route2["waypoints"][0] == {"lat": 12.9870, "lng": 80.2225}
 
 @pytest.mark.asyncio
-async def test_generate_evacuation_route(client, db_session):
+async def test_generate_evacuation_route(client):
     shelter = Shelter(
         id="001",
         name="Anna University Convention Centre",
@@ -87,8 +82,7 @@ async def test_generate_evacuation_route(client, db_session):
         current_occupancy=187,
         address="Chennai"
     )
-    db_session.add(shelter)
-    await db_session.commit()
+    await shelter.insert()
 
     params = {
         "origin_lat": 12.9815,
@@ -112,4 +106,3 @@ async def test_generate_evacuation_route(client, db_session):
         assert "waypoints" in data
         assert "distance_km" in data
         assert data["shelter_name"] == "Anna University Convention Centre"
-

@@ -1,26 +1,23 @@
 """
-GeoGuard AI - Multilingual RAG Chatbot (Module 9)
-Queries database for current alerts, shelters, and risks, and responds in English, Tamil, and Hindi.
+GeoGuard AI - Multilingual RAG Chatbot (MongoDB Atlas / Beanie ODM)
+Queries MongoDB Atlas for current alerts, shelters, and risks, and responds in English, Tamil, and Hindi.
 """
 from typing import Dict, Any, List
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.models import Shelter, Alert, FloodPrediction, RiskZone
-from app.services.routing_service import haversine
+
 
 class DisasterRAGChatbot:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db=None):
         self.db = db
 
     async def get_response(self, query: str, lang: str = "en") -> str:
         """
-        Process user query and return RAG-enhanced response in EN/TA/HI.
+        Process user query and return RAG-enhanced response in EN/TA/HI from MongoDB Atlas.
         """
         q = query.lower()
         
-        # 1. Classify intent
         intent = "general"
-        if any(w in q for w in ["shelter", "camp", "stay", "காப்பகம்", "நிவாரண", "आश्रय", "कैंप", "शरण"]):
+        if any(w in q for w in ["shelter", "camp", "stay", "காப்பகம்", "நிவாரண", "ஆश्रय", "कैंप", "शरण"]):
             intent = "shelters"
         elif any(w in q for w in ["risk", "flood", "water", "level", "அபாயம்", "வெள்ளம்", "துயர்", "बाढ़", "खतरा", "पानी"]):
             intent = "risks"
@@ -31,24 +28,17 @@ class DisasterRAGChatbot:
         elif any(w in q for w in ["safety", "precaution", "prepared", "பாதுகாப்பு", "முன்னெச்சரிக்கை", "सुरक्षा", "सावधानी"]):
             intent = "safety"
 
-        # 2. Retrieve context from DB
-        # Fetch shelters
-        shelter_res = await self.db.execute(select(Shelter))
-        shelters = shelter_res.scalars().all()
+        shelters = await Shelter.find_all().to_list()
+        predictions = await FloodPrediction.find_all().to_list()
+        zones = await RiskZone.find_all().to_list()
+        zone_map = {z.id: z for z in zones}
         
-        # Fetch predictions
-        pred_res = await self.db.execute(select(FloodPrediction).join(FloodPrediction.zone))
-        predictions = pred_res.scalars().all()
-        
-        # Fetch alerts
-        alert_res = await self.db.execute(select(Alert))
-        alerts = alert_res.scalars().all()
+        alerts = await Alert.find_all().to_list()
 
-        # 3. Formulate response based on intent and language
         if intent == "shelters":
             return self._build_shelters_response(shelters, lang)
         elif intent == "risks":
-            return self._build_risks_response(predictions, lang)
+            return self._build_risks_response(predictions, zone_map, lang)
         elif intent == "alerts":
             return self._build_alerts_response(alerts, lang)
         elif intent == "emergency":
@@ -91,7 +81,7 @@ class DisasterRAGChatbot:
             res += "📞 Contact district administration for transit support."
             return res
 
-    def _build_risks_response(self, predictions: List[FloodPrediction], lang: str) -> str:
+    def _build_risks_response(self, predictions: List[FloodPrediction], zone_map: Dict[str, RiskZone], lang: str) -> str:
         critical = [p for p in predictions if p.risk_score >= 70.0]
         
         if lang == "ta":
@@ -99,7 +89,8 @@ class DisasterRAGChatbot:
             if critical:
                 res += "🔴 **உயர்ந்த ஆபத்துள்ள மண்டலங்கள்:**\n"
                 for p in critical:
-                    res += f"• **{p.zone.name}** — அபாய புள்ளி: {int(p.risk_score)}/100 (கணிப்பு ஆழம்: {p.predicted_depth}m)\n"
+                    zname = zone_map[p.zone_id].name if p.zone_id in zone_map else "Unknown Zone"
+                    res += f"• **{zname}** — அபாய புள்ளி: {int(p.risk_score)}/100 (கணிப்பு ஆழம்: {p.predicted_depth}m)\n"
             else:
                 res += "🟢 தற்போது தீவிர ஆபத்துள்ள மண்டலங்கள் எதுவும் இல்லை. அனைத்து பகுதிகளும் பாதுகாப்பாக உள்ளன.\n"
             res += "\n⚠️ **அறிவுரை:** தாழ்வான பகுதிகளில் உள்ள மக்கள் உடனடியாக உயரமான இடங்களுக்கு செல்லவும்."
@@ -110,7 +101,8 @@ class DisasterRAGChatbot:
             if critical:
                 res += "🔴 **उच्च जोखिम वाले क्षेत्र:**\n"
                 for p in critical:
-                    res += f"• **{p.zone.name}** — जोखिम स्कोर: {int(p.risk_score)}/100 (अनुमानित गहराई: {p.predicted_depth}m)\n"
+                    zname = zone_map[p.zone_id].name if p.zone_id in zone_map else "Unknown Zone"
+                    res += f"• **{zname}** — जोखिम स्कोर: {int(p.risk_score)}/100 (अनुमानित गहराई: {p.predicted_depth}m)\n"
             else:
                 res += "🟢 वर्तमान में कोई गंभीर जोखिम क्षेत्र नहीं हैं। सभी क्षेत्र सुरक्षित सीमा में हैं।\n"
             res += "\n⚠️ **सलाह:** निचले इलाकों के निवासी तुरंत सुरक्षित स्थानों पर चले जाएं।"
@@ -121,7 +113,8 @@ class DisasterRAGChatbot:
             if critical:
                 res += "🔴 **High Risk Zones:**\n"
                 for p in critical:
-                    res += f"• **{p.zone.name}** — Risk Score: {int(p.risk_score)}/100 (Predicted Depth: {p.predicted_depth}m)\n"
+                    zname = zone_map[p.zone_id].name if p.zone_id in zone_map else "Unknown Zone"
+                    res += f"• **{zname}** — Risk Score: {int(p.risk_score)}/100 (Predicted Depth: {p.predicted_depth}m)\n"
             else:
                 res += "🟢 All monitored zones are currently below critical alert levels.\n"
             res += "\n⚠️ **Recommendation:** Residents in low-lying buffer basins should verify local coordinates and keep emergency supplies ready."

@@ -1,11 +1,9 @@
 """
-GeoGuard AI - Prediction & Alert Pipeline Service
+GeoGuard AI - Prediction & Alert Pipeline Service (MongoDB Atlas / Beanie ODM)
 Orchestrates RiskEngine, FloodModel, and DataSimulator to update database state and trigger alerts.
 """
 import json
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta
 
 from app.models.models import RiskZone, FloodPrediction, Alert, WeatherData
 from app.ml.prediction import RiskEngine, FloodModel, DataSimulator
@@ -18,10 +16,9 @@ class PredictionService:
         self.risk_engine = RiskEngine()
         self.flood_model = FloodModel()
 
-    async def seed_initial_risk_zones(self, db: AsyncSession) -> list[RiskZone]:
-        """Ensures default risk zones are present in the database."""
-        result = await db.execute(select(RiskZone))
-        zones = result.scalars().all()
+    async def seed_initial_risk_zones(self) -> list[RiskZone]:
+        """Ensures default risk zones are present in MongoDB Atlas."""
+        zones = await RiskZone.find_all().to_list()
         if not zones:
             default_zones = [
                 RiskZone(id="zone-001", name="Adyar River Basin", risk_level="critical", population=45000, vulnerability_score=82.5, boundary_json={"type": "Polygon", "coordinates": [[[13.00, 80.20], [13.02, 80.20], [13.02, 80.23], [13.00, 80.23], [13.00, 80.20]]]}),
@@ -31,21 +28,16 @@ class PredictionService:
                 RiskZone(id="zone-005", name="Tambaram Sector", risk_level="medium", population=15000, vulnerability_score=50.0, boundary_json={"type": "Polygon", "coordinates": [[[12.91, 80.09], [12.93, 80.09], [12.93, 80.11], [12.91, 80.11], [12.91, 80.09]]]})
             ]
             for z in default_zones:
-                db.add(z)
-            await db.commit()
+                await z.insert()
             return default_zones
         return zones
 
-    async def run_prediction_pipeline(self, db: AsyncSession, severity_factor: float = 1.0) -> dict:
+    async def run_prediction_pipeline(self, severity_factor: float = 1.0) -> dict:
         """
-        Runs the full prediction pipeline.
-        Generates simulated weather conditions, evaluates risks per zone,
-        persists outputs, and triggers automated alerts if risk exceeds threshold.
+        Runs the full prediction pipeline in MongoDB Atlas.
         """
-        # 1. Seed zones if needed
-        zones = await self.seed_initial_risk_zones(db)
+        zones = await self.seed_initial_risk_zones()
 
-        # 2. Simulate current weather
         weather_sim = self.simulator.generate_weather_data(severity_factor)
         weather = WeatherData(
             timestamp=datetime.utcnow(),
@@ -55,33 +47,25 @@ class PredictionService:
             wind_speed=weather_sim["wind_speed"],
             pressure=weather_sim["pressure"],
             condition=weather_sim["condition"],
-            source=weather_sim["source"]
+            source=weather_sim["source"],
+            latitude=13.0827,
+            longitude=80.2707
         )
-        if hasattr(weather, 'latitude'):
-            weather.latitude = 13.0827
-            weather.longitude = 80.2707
-        db.add(weather)
+        await weather.insert()
 
         predictions_run = []
         alerts_triggered = []
 
-        # 3. Predict for each zone
         for zone in zones:
-            # Generate inputs based on rain
             inputs = self.simulator.generate_zone_inputs(zone.name, weather.rainfall)
-            
-            # Run risk engine
             risk_res = self.risk_engine.predict_risk(inputs)
             
-            # Predict depth timeline (LSTM)
             rain_forecast = [weather.rainfall * random_decay for random_decay in [1.0, 0.9, 0.8, 0.7, 0.5, 0.3, 0.1, 0.0]]
             initial_depth = 0.5 if risk_res["risk_score"] > 70 else 0.0
             timeline = self.flood_model.predict_depth_timeline(initial_depth, rain_forecast)
             
-            # Primary depth prediction (maximum depth from forecast)
             max_depth = max(t["predicted_depth"] for t in timeline)
             
-            # Create prediction record
             pred = FloodPrediction(
                 zone_id=zone.id,
                 risk_score=risk_res["risk_score"],
@@ -91,18 +75,13 @@ class PredictionService:
                 predicted_depth=max_depth,
                 predicted_duration=48.0,
                 predicted_for=datetime.utcnow() + timedelta(hours=24),
+                area_json=zone.boundary_json,
                 generated_at=datetime.utcnow()
             )
-            
-            # If coordinates / area are emulated
-            if not hasattr(pred, 'area'):
-                pred.area_json = zone.boundary_json
+            await pred.insert()
 
-            db.add(pred)
-
-            # Update zone risk level in DB
             zone.risk_level = risk_res["risk_level"]
-            db.add(zone)
+            await zone.save()
 
             predictions_run.append({
                 "zone_name": zone.name,
@@ -111,16 +90,11 @@ class PredictionService:
                 "max_predicted_depth": max_depth
             })
 
-            # 4. Trigger alert if risk exceeds threshold (>= 60)
             if risk_res["risk_score"] >= 60:
-                # Check if alert already active for this zone to avoid duplicate spamming
-                active_alert_query = await db.execute(
-                    select(Alert).filter(
-                        Alert.target_zone_id == zone.id,
-                        Alert.expires_at > datetime.utcnow()
-                    )
+                existing_alert = await Alert.find_one(
+                    Alert.target_zone_id == zone.id,
+                    Alert.expires_at > datetime.utcnow()
                 )
-                existing_alert = active_alert_query.scalars().first()
                 
                 if not existing_alert:
                     severity = "extreme" if risk_res["risk_score"] >= 80 else "severe"
@@ -133,21 +107,16 @@ class PredictionService:
                         severity=severity,
                         message=f"WARNING: High flood risk prediction for {zone.name}. {explanation}",
                         target_zone_id=zone.id,
+                        area_json=zone.boundary_json,
                         created_at=datetime.utcnow(),
                         expires_at=datetime.utcnow() + timedelta(days=2)
                     )
-                    
-                    if not hasattr(alert, 'area'):
-                        alert.area_json = zone.boundary_json
-                        
-                    db.add(alert)
+                    await alert.insert()
                     alerts_triggered.append({
                         "zone_name": zone.name,
                         "severity": severity,
                         "message": alert.message
                     })
-
-        await db.commit()
 
         return {
             "status": "success",
