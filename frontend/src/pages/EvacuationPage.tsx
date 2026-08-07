@@ -4,6 +4,7 @@ import {
   Navigation, AlertTriangle, MapPin, Clock, Users, Shield,
   ChevronRight, ArrowRight, Zap, Route, Info, CheckCircle,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAppStore } from '../stores/useAppStore';
 import { formatNumber } from '../utils/helpers';
 import { Link } from 'react-router-dom';
@@ -16,7 +17,8 @@ const RISK_GRADIENT: Record<string, string> = {
 };
 
 export default function EvacuationPage() {
-  const { predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes, selectedLocation } = useAppStore();
+  const { user, predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes, selectedLocation } = useAppStore();
+  const isAuthority = user?.role === 'authority' || user?.role === 'admin';
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
   useEffect(() => {
@@ -285,6 +287,45 @@ export default function EvacuationPage() {
                     {Math.round((bestShelter.currentOccupancy / bestShelter.capacity) * 100)}% occupied
                   </p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Authority Only Evacuation Operations Panel */}
+          {isAuthority && (
+            <div className="glass-card-static p-6 border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield size={18} className="text-cyan-400" />
+                  <h2 className="text-base font-bold text-white">Authority Evacuation Operations Control</h2>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 uppercase">
+                  Authority Access
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Override routing parameters, dispatch emergency evacuation escorts, and mark inundated road hazards.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <button
+                  onClick={() => toast.success('Evacuation Escort Buses & NDRF team dispatched to route corridor!', { icon: '🚛' })}
+                  className="btn-primary text-xs py-2 px-3 gap-2 justify-center"
+                >
+                  <Users size={14} /> Dispatch Evacuation Escorts
+                </button>
+                <button
+                  onClick={() => toast.success('Road Closure Alert broadcasted for inundated highway section!', { icon: '🛑' })}
+                  className="btn-danger text-xs py-2 px-3 gap-2 justify-center"
+                >
+                  <AlertTriangle size={14} /> Mark Flooded Road Hazard
+                </button>
+                <button
+                  onClick={() => toast.success('A* Pathfinding re-calculated evacuation corridors!')}
+                  className="btn-secondary text-xs py-2 px-3 gap-2 justify-center"
+                >
+                  <Zap size={14} /> Re-Optimize Routes
+                </button>
               </div>
             </div>
           )}

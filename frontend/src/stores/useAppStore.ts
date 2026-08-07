@@ -52,6 +52,7 @@ interface AppState {
   shelters: Shelter[];
   fetchShelters: () => Promise<void>;
   updateShelterOccupancy: (shelterId: string, occupancy: number) => Promise<void>;
+  createShelter: (shelterData: any) => Promise<void>;
 
   // Reports
   reports: CitizenReport[];
@@ -358,6 +359,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().fetchShelters();
     } catch (err: any) {
       set({ isLoading: false });
+    }
+  },
+
+  createShelter: async (shelterData) => {
+    set({ isLoading: true });
+    try {
+      await api.post('/shelters', shelterData);
+      set({ isLoading: false });
+      await get().fetchShelters();
+      await get().fetchStats();
+    } catch (err: any) {
+      set({ isLoading: false });
+      throw err;
     }
   },
 
