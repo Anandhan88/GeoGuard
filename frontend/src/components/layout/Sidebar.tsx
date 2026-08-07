@@ -27,14 +27,14 @@ const navItems = [
   { label: 'Disaster Map', translationKey: 'disaster_map', icon: Map, path: '/app/map', section: 'main' },
   { label: 'Alerts', translationKey: 'active_alerts', icon: AlertTriangle, path: '/app/alerts', section: 'main', badge: 4 },
   { label: 'Submit Report', translationKey: 'submit_incident_report', icon: FileText, path: '/app/citizen/report', section: 'main', roles: ['citizen', 'volunteer', 'admin'] },
-  { label: 'Authority View', translationKey: 'authority_view', icon: Shield, path: '/app/authority', section: 'main', roles: ['authority', 'admin'] },
+  { label: 'Authority View', translationKey: 'authority_view', icon: Shield, path: '/app/authority?tab=overview', section: 'main', roles: ['authority', 'admin'] },
   { label: 'Predictions', translationKey: 'top_predictions', icon: Activity, path: '/app/prediction/zone-001', section: 'intelligence' },
   { label: 'Satellite', translationKey: 'satellite_imagery', icon: Satellite, path: '/app/satellite', section: 'intelligence' },
   { label: 'Weather Forecasts', translationKey: 'weather_analysis', icon: Cloud, path: '/app/weather', section: 'intelligence' },
-  { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority', section: 'intelligence', roles: ['authority', 'admin'] },
+  { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority?tab=impact', section: 'intelligence', roles: ['authority', 'admin'] },
   { label: 'Evacuation', translationKey: 'evacuation_routes', icon: Navigation, path: '/app/evacuation', section: 'response' },
   { label: 'Shelters', translationKey: 'shelters_active', icon: Building, path: '/app/shelters', section: 'response' },
-  { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/authority', section: 'response', roles: ['authority', 'admin'] },
+  { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/authority?tab=resources', section: 'response', roles: ['authority', 'admin'] },
   { label: 'AI Assistant', translationKey: 'ai_assistant', icon: MessageSquare, path: '/app/assistant', section: 'tools' },
   { label: 'Settings', translationKey: 'settings', icon: Settings, path: '/app/settings', section: 'system' },
   { label: 'Help', translationKey: 'help', icon: HelpCircle, path: '/app/help', section: 'system' },
@@ -55,11 +55,13 @@ export default function Sidebar() {
   const role = user?.role || 'citizen';
   const topPredId = predictions[0]?.id || 'zone-001';
 
+  const currentFullUrl = location.pathname + (location.search || (location.pathname === '/app/authority' ? '?tab=overview' : ''));
+
   return (
     <motion.aside
       animate={{ width: sidebarOpen ? 256 : 80 }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-      className="fixed left-0 top-16 bottom-0 z-40 bg-bg-secondary/50 backdrop-blur-xl border-r border-white/5 flex flex-col overflow-hidden"
+      transition={{ duration: 0.2, ease: 'easeInOut' }}
+      className="fixed left-0 top-16 bottom-0 z-40 bg-slate-950/80 backdrop-blur-xl border-r border-white/5 flex flex-col justify-between py-4"
     >
       {/* Collapse Button */}
       <button
@@ -74,12 +76,12 @@ export default function Sidebar() {
         />
       </button>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3">
+      {/* Navigation Sections */}
+      <nav className="px-3 overflow-y-auto overflow-x-hidden flex-1 scrollbar-none">
         {sections.map((section) => {
-          const items = navItems
-            .filter((item) => item.section === section.key)
-            .filter((item) => !item.roles || item.roles.includes(role));
+          const items = navItems.filter(
+            (i) => i.section === section.key && (!i.roles || i.roles.includes(role))
+          );
           if (items.length === 0) return null;
 
           return (
@@ -93,9 +95,11 @@ export default function Sidebar() {
                 const resolvedPath = item.label === 'Predictions'
                   ? `/app/prediction/${topPredId}`
                   : item.label === 'Overview'
-                  ? (role === 'authority' || role === 'admin' ? '/app/authority' : '/app/citizen')
+                  ? (role === 'authority' || role === 'admin' ? '/app/authority?tab=overview' : '/app/citizen')
                   : item.path;
-                const isActive = location.pathname.startsWith('/app/prediction') ? item.label === 'Predictions' : location.pathname === resolvedPath;
+                const isActive = location.pathname.startsWith('/app/prediction')
+                  ? item.label === 'Predictions'
+                  : currentFullUrl === resolvedPath || (resolvedPath === '/app/authority?tab=overview' && currentFullUrl === '/app/authority');
                 const Icon = item.icon;
                 const displayLabel = t(item.translationKey as any) || item.label;
 

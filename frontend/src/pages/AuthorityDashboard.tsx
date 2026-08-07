@@ -4,7 +4,8 @@ import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import {
   AlertTriangle, Users, Truck, Activity, Shield, MapPin,
   ArrowUpRight, Target, DollarSign, CheckCircle2, AlertCircle,
-  FileText, Navigation, RefreshCw, Send, Check, Eye
+  FileText, Navigation, RefreshCw, Send, Check, Eye, BarChart3,
+  Building, Heart
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAppStore } from '../stores/useAppStore';
@@ -156,7 +157,7 @@ export default function AuthorityDashboard() {
 
   const tabs = [
     { id: 'overview', label: 'Command Overview', icon: Shield },
-    { id: 'impact', label: 'Impact Analysis', icon: Activity },
+    { id: 'impact', label: 'Impact Analysis', icon: BarChart3 },
     { id: 'resources', label: 'Resource Deployment', icon: Truck },
     { id: 'reports', label: 'Citizen Incident Action Center', icon: FileText, badge: unverifiedReportsCount },
   ];
@@ -168,12 +169,19 @@ export default function AuthorityDashboard() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Shield size={26} className="text-cyan-400" />
-            {t('command_center')}
+            {activeTab === 'impact' ? 'Zone Impact & Structural Loss Assessment' :
+             activeTab === 'resources' ? 'Emergency Fleet & Resource Deployment Center' :
+             activeTab === 'reports' ? 'Citizen Incident Reports & Action Center' :
+             t('command_center')}
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Real-time Disaster Operations, Citizen Incident Management & Rescue Deployment Panel
+            {activeTab === 'impact' ? 'Multi-dimensional structural damage, population impact & estimated financial loss analysis' :
+             activeTab === 'resources' ? 'Rescue boats, ambulances, relief trucks, and medical team allocation control' :
+             activeTab === 'reports' ? 'Citizen-reported disaster incidents from MongoDB Atlas with authority verification & dispatch' :
+             'Real-time Disaster Operations Command Center Panel'}
           </p>
         </div>
+
         <div className="flex items-center gap-3">
           <button
             onClick={handleGeneratePredictions}
@@ -251,231 +259,260 @@ export default function AuthorityDashboard() {
         ))}
       </div>
 
-      {/* ─── TAB 1: OVERVIEW TAB ─── */}
-      {(activeTab === 'overview' || activeTab === 'impact') && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Impact Assessment Radar */}
-          <div className="glass-card-static p-6">
-            <h3 className="text-base font-semibold text-white mb-1">{t('impact_assessment')}</h3>
-            <p className="text-xs text-slate-500 mb-4">Multi-dimensional structural & economic loss analysis</p>
-            <ResponsiveContainer width="100%" height={250}>
-              <RadarChart data={impactRadarData}>
-                <PolarGrid stroke="rgba(148,163,184,0.1)" />
-                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <PolarRadiusAxis tick={false} axisLine={false} />
-                <Radar
-                  name="Impact"
-                  dataKey="value"
-                  stroke="#3b82f6"
-                  fill="#3b82f6"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Resource Allocation Chart */}
-          <div className="glass-card-static p-6">
-            <h3 className="text-base font-semibold text-white mb-1">{t('resources')}</h3>
-            <p className="text-xs text-slate-500 mb-4">Deployed emergency resources per zone</p>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={resourceChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.05)" />
-                <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: 'rgba(15,23,42,0.95)',
-                    border: '1px solid rgba(148,163,184,0.1)',
-                    borderRadius: '12px',
-                  }}
-                />
-                <Bar dataKey="ambulances" fill="#ef4444" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="boats" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="trucks" fill="#f59e0b" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="medical" fill="#10b981" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="flex items-center justify-center gap-4 mt-2 text-[10px]">
-              {[
-                { label: 'Ambulances', color: '#ef4444' },
-                { label: 'Boats', color: '#3b82f6' },
-                { label: 'Trucks', color: '#f59e0b' },
-                { label: 'Medical', color: '#10b981' },
-              ].map((l) => (
-                <div key={l.label} className="flex items-center gap-1">
-                  <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: l.color }} />
-                  <span className="text-slate-400">{l.label}</span>
-                </div>
-              ))}
+      {/* ─── 1. OVERVIEW TAB ONLY ─── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Impact Assessment Radar */}
+            <div className="glass-card-static p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-semibold text-white">{t('impact_assessment')}</h3>
+                <button onClick={() => setSearchParams({ tab: 'impact' })} className="text-[11px] text-cyan-400 hover:underline">
+                  View Full Impact &rarr;
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">Multi-dimensional structural damage & vulnerability</p>
+              <ResponsiveContainer width="100%" height={230}>
+                <RadarChart data={impactRadarData}>
+                  <PolarGrid stroke="rgba(148,163,184,0.1)" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <PolarRadiusAxis tick={false} axisLine={false} />
+                  <Radar
+                    name="Impact"
+                    dataKey="value"
+                    stroke="#3b82f6"
+                    fill="#3b82f6"
+                    fillOpacity={0.15}
+                    strokeWidth={2}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
 
-          {/* Report Types Pie */}
-          <div className="glass-card-static p-6">
-            <h3 className="text-base font-semibold text-white mb-1">{t('citizen_reports')}</h3>
-            <p className="text-xs text-slate-500 mb-4">Citizen reports categorized by type</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={reportPieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={80}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {reportPieData.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: 'rgba(15,23,42,0.95)',
-                    border: '1px solid rgba(148,163,184,0.1)',
-                    borderRadius: '12px',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2">
-              {reportPieData.map((entry, i) => (
-                <div key={entry.name} className="flex items-center gap-1.5 text-[10px]">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }} />
-                  <span className="text-slate-400 capitalize">{entry.name}</span>
-                </div>
-              ))}
+            {/* Resource Allocation Chart */}
+            <div className="glass-card-static p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-semibold text-white">{t('resources')}</h3>
+                <button onClick={() => setSearchParams({ tab: 'resources' })} className="text-[11px] text-cyan-400 hover:underline">
+                  View Resource Fleet &rarr;
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">Deployed emergency resources per zone</p>
+              <ResponsiveContainer width="100%" height={230}>
+                <BarChart data={resourceChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.05)" />
+                  <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'rgba(15,23,42,0.95)',
+                      border: '1px solid rgba(148,163,184,0.1)',
+                      borderRadius: '12px',
+                    }}
+                  />
+                  <Bar dataKey="ambulances" fill="#ef4444" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="boats" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="trucks" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="medical" fill="#10b981" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Report Types Pie */}
+            <div className="glass-card-static p-6 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-semibold text-white">{t('citizen_reports')}</h3>
+                <button onClick={() => setSearchParams({ tab: 'reports' })} className="text-[11px] text-cyan-400 hover:underline">
+                  Action Center &rarr;
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">Citizen reports categorized by type</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={reportPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {reportPieData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: 'rgba(15,23,42,0.95)',
+                      border: '1px solid rgba(148,163,184,0.1)',
+                      borderRadius: '12px',
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1 text-[10px]">
+                {reportPieData.map((entry, i) => (
+                  <div key={entry.name} className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i] }} />
+                    <span className="text-slate-400 capitalize">{entry.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── TAB 2: IMPACT ANALYSIS VIEW ─── */}
-      {(activeTab === 'overview' || activeTab === 'impact') && (
-        <div className="glass-card-static p-6 border border-white/10">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-white">{t('zone_impact_analysis')}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Disaster impact, structural vulnerability & estimated financial loss</p>
-            </div>
-            <button
-              onClick={() => toast.success('Exporting Zone Impact Report as CSV...')}
-              className="btn-secondary text-xs py-1.5"
-            >
-              {t('export_report')} <ArrowUpRight size={12} />
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/5">
-                  {[t('zone_name'), t('risk_level'), t('affected_population'), 'Buildings', 'Schools', 'Hospitals', 'Agri (Ha)', 'Est. Loss', t('risk_score')].map((h) => (
-                    <th key={h} className="text-left py-3 px-3 text-xs text-slate-500 font-medium uppercase tracking-wider">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {impactAssessments.map((impact) => {
-                  const pred = predictions.find((p) => p.zoneId === impact.zoneId);
-                  return (
-                    <tr
-                      key={impact.zoneId}
-                      className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
-                    >
-                      <td className="py-3 px-3 font-medium text-white">{impact.zoneName}</td>
-                      <td className="py-3 px-3">
-                        <span className={`badge ${getRiskBadgeClass(pred?.riskLevel || 'medium')}`}>
-                          {pred?.riskScore || 0}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-300">{formatNumber(impact.populationAffected)}</td>
-                      <td className="py-3 px-3 text-slate-300">{formatNumber(impact.buildingsAtRisk)}</td>
-                      <td className="py-3 px-3 text-slate-300">{impact.schoolsAffected}</td>
-                      <td className="py-3 px-3 text-slate-300">{impact.hospitalsAffected}</td>
-                      <td className="py-3 px-3 text-slate-300">{impact.agriculturalAreaHa}</td>
-                      <td className="py-3 px-3 text-amber-400 font-medium">{formatCurrency(impact.economicLossEstimate)}</td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${impact.impactScore}%`,
-                                backgroundColor: impact.impactScore >= 80 ? '#ef4444' : impact.impactScore >= 60 ? '#f59e0b' : '#06b6d4',
-                              }}
-                            />
-                          </div>
-                          <span className="text-xs text-slate-400">{impact.impactScore}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ─── TAB 3: RESOURCE DEPLOYMENT VIEW ─── */}
-      {(activeTab === 'overview' || activeTab === 'resources') && (
-        <div className="glass-card-static p-6 border border-white/10">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-white">{t('resource_deployment_plan')}</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Emergency rescue fleet, medical team & equipment deployment per zone</p>
-            </div>
-            <button
-              onClick={() => toast.success('Optimization engine re-calculated rescue fleet allocation!')}
-              className="btn-primary text-xs py-1.5"
-            >
-              <Target size={12} /> {t('optimize_allocation')}
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {resourceAllocations.map((alloc) => (
-              <div
-                key={alloc.zoneId}
-                className="p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-semibold text-white">{alloc.zoneName}</h4>
-                  <span className={`badge ${getRiskBadgeClass(alloc.severity)}`}>
-                    {alloc.severity}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: 'Ambulances', value: alloc.ambulances, icon: '🚑' },
-                    { label: 'Rescue Boats', value: alloc.rescueBoats, icon: '🚤' },
-                    { label: 'Relief Trucks', value: alloc.reliefTrucks, icon: '🚛' },
-                    { label: 'Medical Teams', value: alloc.medicalTeams, icon: '👨‍⚕️' },
-                  ].map((res) => (
-                    <div key={res.label} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03]">
-                      <span className="text-sm">{res.icon}</span>
-                      <div>
-                        <p className="text-xs text-slate-500">{res.label}</p>
-                        <p className="text-sm font-bold text-white">{res.value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">{t('total_personnel')}</span>
-                  <span className="text-sm font-bold text-cyan-400">{alloc.totalPersonnel}</span>
-                </div>
+      {/* ─── 2. DEDICATED IMPACT ANALYSIS TAB ONLY ─── */}
+      {activeTab === 'impact' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Affected Population', value: formatNumber(stats.populationAffected), color: '#3b82f6', icon: Users },
+              { label: 'Total Buildings At Risk', value: formatNumber(Math.round(stats.populationAffected / 12)), color: '#ef4444', icon: Building },
+              { label: 'Schools & Hospitals At Risk', value: Math.round(stats.populationAffected / 12 / 250) + Math.round(stats.populationAffected / 12 / 1200), color: '#f59e0b', icon: Heart },
+              { label: 'Est. Economic Loss', value: `₹${(stats.populationAffected / 12 * 1.25 / 100).toFixed(1)} Cr`, color: '#8b5cf6', icon: DollarSign },
+            ].map((card, idx) => (
+              <div key={idx} className="glass-card-static p-4 border border-white/10">
+                <card.icon size={20} style={{ color: card.color }} className="mb-2" />
+                <p className="text-2xl font-bold text-white">{card.value}</p>
+                <p className="text-xs text-slate-400 mt-1">{card.label}</p>
               </div>
             ))}
           </div>
+
+          <div className="glass-card-static p-6 border border-white/10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">Zone Structural Vulnerability & Financial Impact Table</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Calculated based on flood depth, population density, and infrastructure assets</p>
+              </div>
+              <button
+                onClick={() => toast.success('Exporting Zone Impact Analysis as CSV...')}
+                className="btn-secondary text-xs py-1.5 px-3 gap-1.5"
+              >
+                <span>Export CSV Report</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-400 uppercase tracking-wider text-xs">
+                    <th className="py-3 px-3">Zone Name</th>
+                    <th className="py-3 px-3">Risk Level</th>
+                    <th className="py-3 px-3">Affected Pop.</th>
+                    <th className="py-3 px-3">Buildings</th>
+                    <th className="py-3 px-3">Schools</th>
+                    <th className="py-3 px-3">Hospitals</th>
+                    <th className="py-3 px-3">Agri (Ha)</th>
+                    <th className="py-3 px-3">Est. Loss</th>
+                    <th className="py-3 px-3">Vulnerability Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {impactAssessments.map((impact) => {
+                    const pred = predictions.find((p) => p.zoneId === impact.zoneId);
+                    return (
+                      <tr key={impact.zoneId} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-3 font-medium text-white">{impact.zoneName}</td>
+                        <td className="py-3 px-3">
+                          <span className={`badge ${getRiskBadgeClass(pred?.riskLevel || 'medium')}`}>
+                            {pred?.riskScore || 0}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-slate-300">{formatNumber(impact.populationAffected)}</td>
+                        <td className="py-3 px-3 text-slate-300">{formatNumber(impact.buildingsAtRisk)}</td>
+                        <td className="py-3 px-3 text-slate-300">{impact.schoolsAffected}</td>
+                        <td className="py-3 px-3 text-slate-300">{impact.hospitalsAffected}</td>
+                        <td className="py-3 px-3 text-slate-300">{impact.agriculturalAreaHa}</td>
+                        <td className="py-3 px-3 text-amber-400 font-medium">{formatCurrency(impact.economicLossEstimate)}</td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-2 rounded-full bg-white/5 overflow-hidden">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${impact.impactScore}%`,
+                                  backgroundColor: impact.impactScore >= 80 ? '#ef4444' : impact.impactScore >= 60 ? '#f59e0b' : '#06b6d4',
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs text-slate-400 font-mono">{impact.impactScore}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* ─── TAB 4: CITIZEN INCIDENT ACTION CENTER ─── */}
-      {(activeTab === 'overview' || activeTab === 'reports') && (
+      {/* ─── 3. DEDICATED RESOURCE DEPLOYMENT TAB ONLY ─── */}
+      {activeTab === 'resources' && (
+        <div className="space-y-6">
+          <div className="glass-card-static p-6 border border-white/10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">Emergency Fleet & Rescue Resource Allocation Control</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Optimized resource distribution based on flood risk severity</p>
+              </div>
+              <button
+                onClick={() => toast.success('Rescue fleet allocation optimized across all zones!')}
+                className="btn-primary text-xs py-2 px-4 gap-2"
+              >
+                <Target size={14} /> Re-Optimize Fleet Distribution
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {resourceAllocations.map((alloc) => (
+                <div
+                  key={alloc.zoneId}
+                  className="p-4 rounded-xl border border-white/5 bg-slate-900/60 hover:border-white/10 transition-colors space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-white">{alloc.zoneName}</h4>
+                    <span className={`badge ${getRiskBadgeClass(alloc.severity)}`}>
+                      {alloc.severity}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: 'Ambulances', value: alloc.ambulances, icon: '🚑' },
+                      { label: 'Rescue Boats', value: alloc.rescueBoats, icon: '🚤' },
+                      { label: 'Relief Trucks', value: alloc.reliefTrucks, icon: '🚛' },
+                      { label: 'Medical Teams', value: alloc.medicalTeams, icon: '👨‍⚕️' },
+                    ].map((res) => (
+                      <div key={res.label} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03]">
+                        <span className="text-base">{res.icon}</span>
+                        <div>
+                          <p className="text-[10px] text-slate-500">{res.label}</p>
+                          <p className="text-sm font-bold text-white">{res.value}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Total Personnel Deployed</span>
+                    <span className="font-bold text-cyan-400">{alloc.totalPersonnel} Officers</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 4. DEDICATED CITIZEN ACTION CENTER TAB ONLY ─── */}
+      {activeTab === 'reports' && (
         <div className="glass-card-static p-6 border border-white/10 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
