@@ -238,6 +238,7 @@ async def get_weather_forecast(
 
 # Keep location search and station queries for backward compatibility
 LOCAL_GEOCODE_DB = [
+    # Tamil Nadu
     {"name": "Chennai, Tamil Nadu", "lat": 13.0827, "lng": 80.2707, "type": "city"},
     {"name": "Velachery, Chennai, Tamil Nadu", "lat": 12.9750, "lng": 80.2206, "type": "suburb"},
     {"name": "Anna Nagar, Chennai, Tamil Nadu", "lat": 13.0850, "lng": 80.2101, "type": "suburb"},
@@ -247,14 +248,61 @@ LOCAL_GEOCODE_DB = [
     {"name": "Tiruchirappalli (Trichy), Tamil Nadu", "lat": 10.7905, "lng": 78.7047, "type": "city"},
     {"name": "Salem, Tamil Nadu", "lat": 11.6643, "lng": 78.1460, "type": "city"},
     {"name": "Tirunelveli, Tamil Nadu", "lat": 8.7139, "lng": 77.7567, "type": "city"},
+    {"name": "Erode, Tamil Nadu", "lat": 11.3410, "lng": 77.7172, "type": "city"},
+    {"name": "Perundurai, Erode, Tamil Nadu", "lat": 11.2753, "lng": 77.5870, "type": "town"},
+    {"name": "Vellore, Tamil Nadu", "lat": 12.9165, "lng": 79.1325, "type": "city"},
+    {"name": "Thoothukudi (Tuticorin), Tamil Nadu", "lat": 8.7642, "lng": 78.1348, "type": "city"},
+    {"name": "Thanjavur, Tamil Nadu", "lat": 10.7870, "lng": 79.1378, "type": "city"},
+    {"name": "Dindigul, Tamil Nadu", "lat": 10.3624, "lng": 77.9695, "type": "city"},
+    {"name": "Cuddalore, Tamil Nadu", "lat": 11.7480, "lng": 79.7714, "type": "city"},
+    {"name": "Kanchipuram, Tamil Nadu", "lat": 12.8342, "lng": 79.7036, "type": "city"},
+    {"name": "Nagercoil, Tamil Nadu", "lat": 8.1833, "lng": 77.4119, "type": "city"},
+    {"name": "Kumbakonam, Tamil Nadu", "lat": 10.9617, "lng": 79.3881, "type": "city"},
+    {"name": "Karur, Tamil Nadu", "lat": 10.9601, "lng": 78.0766, "type": "city"},
+    {"name": "Hosur, Tamil Nadu", "lat": 12.7409, "lng": 77.8253, "type": "city"},
+    {"name": "Tiruppur, Tamil Nadu", "lat": 11.1085, "lng": 77.3411, "type": "city"},
+    {"name": "Sivakasi, Tamil Nadu", "lat": 9.4533, "lng": 77.7981, "type": "city"},
+    {"name": "Ooty (Udhagamandalam), Tamil Nadu", "lat": 11.4102, "lng": 76.6950, "type": "city"},
+    {"name": "Pollachi, Tamil Nadu", "lat": 10.6609, "lng": 77.0087, "type": "city"},
+    {"name": "Ramanathapuram, Tamil Nadu", "lat": 9.3762, "lng": 78.8308, "type": "city"},
+    {"name": "Nagapattinam, Tamil Nadu", "lat": 10.7672, "lng": 79.8449, "type": "city"},
+    {"name": "Villupuram, Tamil Nadu", "lat": 11.9401, "lng": 79.4861, "type": "city"},
+    # Karnataka
     {"name": "Bengaluru, Karnataka", "lat": 12.9716, "lng": 77.5946, "type": "city"},
+    {"name": "Mysuru (Mysore), Karnataka", "lat": 12.2958, "lng": 76.6394, "type": "city"},
+    {"name": "Mangaluru, Karnataka", "lat": 12.9141, "lng": 74.8560, "type": "city"},
+    {"name": "Hubli-Dharwad, Karnataka", "lat": 15.3647, "lng": 75.1240, "type": "city"},
+    # Kerala
+    {"name": "Kochi (Cochin), Kerala", "lat": 9.9312, "lng": 76.2673, "type": "city"},
+    {"name": "Thiruvananthapuram, Kerala", "lat": 8.5241, "lng": 76.9366, "type": "city"},
+    {"name": "Kozhikode (Calicut), Kerala", "lat": 11.2588, "lng": 75.7804, "type": "city"},
+    {"name": "Thrissur, Kerala", "lat": 10.5276, "lng": 76.2144, "type": "city"},
+    # Andhra Pradesh & Telangana
+    {"name": "Hyderabad, Telangana", "lat": 17.3850, "lng": 78.4867, "type": "city"},
+    {"name": "Visakhapatnam (Vizag), Andhra Pradesh", "lat": 17.6868, "lng": 83.2185, "type": "city"},
+    {"name": "Vijayawada, Andhra Pradesh", "lat": 16.5062, "lng": 80.6480, "type": "city"},
+    {"name": "Tirupati, Andhra Pradesh", "lat": 13.6288, "lng": 79.4192, "type": "city"},
+    # Maharashtra & Others
     {"name": "Mumbai, Maharashtra", "lat": 19.0760, "lng": 72.8777, "type": "city"},
+    {"name": "Pune, Maharashtra", "lat": 18.5204, "lng": 73.8567, "type": "city"},
+    {"name": "Nagpur, Maharashtra", "lat": 21.1458, "lng": 79.0882, "type": "city"},
     {"name": "Delhi, NCR", "lat": 28.6139, "lng": 77.2090, "type": "city"},
+    {"name": "Kolkata, West Bengal", "lat": 22.5726, "lng": 88.3639, "type": "city"},
+    {"name": "Lucknow, Uttar Pradesh", "lat": 26.8467, "lng": 80.9462, "type": "city"},
+    {"name": "Jaipur, Rajasthan", "lat": 26.9124, "lng": 75.7873, "type": "city"},
+    {"name": "Ahmedabad, Gujarat", "lat": 23.0225, "lng": 72.5714, "type": "city"},
+    {"name": "Surat, Gujarat", "lat": 21.1702, "lng": 72.8311, "type": "city"},
+    {"name": "Bhopal, Madhya Pradesh", "lat": 23.2599, "lng": 77.4126, "type": "city"},
+    {"name": "Patna, Bihar", "lat": 25.6093, "lng": 85.1376, "type": "city"},
+    {"name": "Chandigarh, Punjab", "lat": 30.7333, "lng": 76.7794, "type": "city"},
+    {"name": "Guwahati, Assam", "lat": 26.1445, "lng": 91.7362, "type": "city"},
+    {"name": "Bhubaneswar, Odisha", "lat": 20.2961, "lng": 85.8245, "type": "city"},
+    {"name": "Pondicherry (Puducherry)", "lat": 11.9416, "lng": 79.8083, "type": "city"},
 ]
 
 @router.get("/search")
 async def search_location(query: str = Query(..., min_length=2)):
-    """Search for locations using Nominatim with local fallback."""
+    """Search for locations — instant local DB first, Nominatim only as fallback."""
     import urllib.parse
     query_clean = query.strip().lower()
     cache_key = f"weather:search:{query_clean}"
@@ -262,32 +310,52 @@ async def search_location(query: str = Query(..., min_length=2)):
     if cached:
         return cached
 
+    # 1) Search local DB first (instant, <1ms)
+    local_results = [
+        {**loc, "lon": loc["lng"]}
+        for loc in LOCAL_GEOCODE_DB
+        if query_clean in loc["name"].lower()
+    ]
+
+    # 2) If local DB has enough results, return immediately without calling Nominatim
+    if len(local_results) >= 2:
+        await WeatherServiceCache.set(cache_key, local_results[:6], expire_seconds=3600)
+        return local_results[:6]
+
+    # 3) Fall back to Nominatim only when local DB doesn't have enough matches
+    nominatim_results = []
     encoded = urllib.parse.quote(query.strip())
-    client = httpx.AsyncClient(timeout=5.0)
-    headers = {"User-Agent": "GeoGuardAI/1.0"}
     url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=6&countrycodes=in"
-
-    results = []
     try:
-        res = await client.get(url, headers=headers)
-        if res.status_code == 200:
-            for item in res.json():
-                if item.get("lat") and item.get("lon"):
-                    results.append({
-                        "name": item.get("display_name"),
-                        "lat": float(item.get("lat")),
-                        "lng": float(item.get("lon")),
-                        "lon": float(item.get("lon")),
-                    })
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            res = await client.get(url, headers={"User-Agent": "GeoGuardAI/1.0"})
+            if res.status_code == 200:
+                for item in res.json():
+                    if item.get("lat") and item.get("lon"):
+                        nominatim_results.append({
+                            "name": item.get("display_name"),
+                            "lat": float(item.get("lat")),
+                            "lng": float(item.get("lon")),
+                            "lon": float(item.get("lon")),
+                        })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Nominatim search failed for '{query}': {e}")
 
-    if not results:
-        results = [
-            {**loc, "lon": loc["lng"]}
-            for loc in LOCAL_GEOCODE_DB
-            if query_clean in loc["name"].lower()
-        ]
+    # 4) Merge: local results first, then Nominatim (deduplicated)
+    seen_coords = {(r["lat"], r["lng"]) for r in local_results}
+    combined = list(local_results)
+    for nr in nominatim_results:
+        coord_key = (round(nr["lat"], 3), round(nr["lng"], 3))
+        if coord_key not in seen_coords:
+            combined.append(nr)
+            seen_coords.add(coord_key)
 
-    await WeatherServiceCache.set(cache_key, results, expire_seconds=86400)
-    return results
+    final = combined[:6]
+
+    # Only cache non-empty results
+    if final:
+        await WeatherServiceCache.set(cache_key, final, expire_seconds=3600)
+
+    return final
+

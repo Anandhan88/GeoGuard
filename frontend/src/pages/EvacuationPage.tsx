@@ -37,7 +37,7 @@ export default function EvacuationPage() {
 
   // Get matching evacuation route for selected zone
   const matchingRoute = evacuationRoutes.find(
-    (r) => selectedPred && (r.name || (r as any).shelter_name || r.shelterName || '').toLowerCase().includes(selectedPred.zoneName.split(' ')[0].toLowerCase())
+    (r) => selectedPred?.zoneName && (r.name || (r as any).shelter_name || r.shelterName || '').toLowerCase().includes(selectedPred.zoneName.split(' ')[0].toLowerCase())
   ) || evacuationRoutes[0];
 
   // Normalize route fields (backend uses snake_case, mock uses camelCase)

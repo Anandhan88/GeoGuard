@@ -17,8 +17,16 @@ async def list_satellite_images(
     limit: int = Query(10, le=50)
 ):
     """Retrieve history of processed satellite images from MongoDB Atlas."""
-    images = await SatelliteImage.find_all().sort(-SatelliteImage.capture_date).limit(limit).to_list()
-    return images
+    try:
+        images = await SatelliteImage.find_all().sort("-capture_date").limit(limit).to_list()
+        if not images:
+            from app.core.seeding import seed_all
+            await seed_all()
+            images = await SatelliteImage.find_all().sort("-capture_date").limit(limit).to_list()
+        return images
+    except Exception as e:
+        print(f"Error fetching satellite images: {e}")
+        return []
 
 
 @router.get("/status")

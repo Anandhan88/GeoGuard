@@ -16,7 +16,7 @@ import {
   Clock,
   Satellite,
 } from 'lucide-react';
-import axios from 'axios';
+import { api } from '../utils/api';
 import { useAppStore } from '../stores/useAppStore';
 import { mockWeatherData } from '../data/mockData';
 import { useTranslation } from '../utils/translations';
@@ -121,8 +121,8 @@ export default function CitizenDashboard() {
 
   const fetchSatelliteInfo = async () => {
     try {
-      const satRes = await axios.get('/api/satellite/latest');
-      if (satRes.data?.data) setSatStatus(satRes.data.data);
+      const satRes = await api.get('/satellite/status');
+      if (satRes.data) setSatStatus(satRes.data);
     } catch (e) {
       console.error("Failed to load satellite dashboard data:", e);
     }
@@ -148,7 +148,17 @@ export default function CitizenDashboard() {
     Low: '#10b981',
   };
 
-  const weather = liveWeather || mockWeatherData;
+  const weather = liveWeather
+    ? {
+        ...mockWeatherData,
+        ...liveWeather,
+        rainfall: liveWeather.rainfall ?? (liveWeather as any).rain ?? mockWeatherData.rainfall,
+        windSpeed: liveWeather.windSpeed ?? (liveWeather as any).wind_speed ?? mockWeatherData.windSpeed,
+        pressure: liveWeather.pressure ?? (liveWeather as any).surface_pressure ?? mockWeatherData.pressure,
+        forecast: (liveWeather.forecast && liveWeather.forecast.length > 0) ? liveWeather.forecast : mockWeatherData.forecast,
+        hourlyForecast: (liveWeather.hourlyForecast && liveWeather.hourlyForecast.length > 0) ? liveWeather.hourlyForecast : mockWeatherData.hourlyForecast,
+      }
+    : mockWeatherData;
   const chartData = weather.hourlyForecast?.map((h: any) => ({
     time: h.time,
     actual: h.predicted ? null : h.rainfall,
@@ -372,7 +382,7 @@ export default function CitizenDashboard() {
                     </div>
                     {/* Factor mini-bars */}
                     <div className="flex gap-1 mt-2">
-                      {pred.factors.slice(0, 4).map((f) => (
+                      {pred.factors?.slice(0, 4).map((f) => (
                         <div key={f.name} className="flex-1" title={`${f.name}: ${f.contribution}%`}>
                           <div className="h-1 rounded-full bg-white/5 overflow-hidden">
                             <div
@@ -440,7 +450,7 @@ export default function CitizenDashboard() {
             <div className="mt-4 pt-4 border-t border-white/5">
               <p className="text-xs text-slate-500 mb-2">{t('forecast_5day')}</p>
               <div className="flex justify-between">
-                {weather.forecast.map((day: any) => (
+                {weather.forecast?.map((day: any) => (
                   <div key={day.date} className="text-center">
                     <p className="text-[10px] text-slate-500">{new Date(day.date).toLocaleDateString(lang, { weekday: 'short' })}</p>
                     <p className="text-lg my-1">{day.icon}</p>

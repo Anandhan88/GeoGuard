@@ -18,6 +18,8 @@ import AIAssistantPage from './pages/AIAssistantPage';
 import EvacuationPage from './pages/EvacuationPage';
 import SatellitePage from './pages/SatellitePage';
 import WeatherPage from './pages/WeatherPage';
+import SettingsPage from './pages/SettingsPage';
+import HelpPage from './pages/HelpPage';
 import { useAppStore } from './stores/useAppStore';
 import './index.css';
 
@@ -79,6 +81,8 @@ export default function App() {
             <Route path="assistant" element={<AIAssistantPage />} />
             <Route path="satellite" element={<SatellitePage />} />
             <Route path="weather" element={<WeatherPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="help" element={<HelpPage />} />
             <Route path="prediction/:id" element={<PredictionDetail />} />
           </Route>
         </Routes>

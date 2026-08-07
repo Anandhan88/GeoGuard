@@ -50,7 +50,7 @@ export default function AuthorityDashboard() {
     const trucks = p.riskScore >= 80 ? 6 : p.riskScore >= 60 ? 4 : 2;
     const medical = p.riskScore >= 80 ? 4 : p.riskScore >= 60 ? 2 : 1;
     return {
-      name: p.zoneName.split(' ')[0],
+      name: p.zoneName ? p.zoneName.split(' ')[0] : 'Zone',
       ambulances,
       boats,
       trucks,

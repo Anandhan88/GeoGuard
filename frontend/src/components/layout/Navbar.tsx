@@ -41,6 +41,7 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const debounceTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
@@ -55,12 +56,17 @@ export default function Navbar() {
     setSearchQuery(val);
     if (!val || val.trim().length < 2) {
       setSuggestions([]);
+      setShowSuggestions(false);
+      setIsSearching(false);
       return;
     }
 
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
     }
+
+    setIsSearching(true);
+    setShowSuggestions(true);
 
     debounceTimeoutRef.current = setTimeout(async () => {
       try {
@@ -69,8 +75,10 @@ export default function Navbar() {
         setShowSuggestions(true);
       } catch (e) {
         console.error("Geocoding search failed:", e);
+      } finally {
+        setIsSearching(false);
       }
-    }, 400);
+    }, 250);
   }, []);
 
   const handleSelectSuggestion = (suggestion: any) => {
@@ -85,6 +93,7 @@ export default function Navbar() {
     setSearchQuery(suggestion.name.split(',')[0]);
     setSuggestions([]);
     setShowSuggestions(false);
+    setIsSearching(false);
   };
 
   // Profile settings modal states
@@ -156,12 +165,16 @@ export default function Navbar() {
         {/* Center - Search */}
         <div className="hidden lg:flex flex-1 max-w-md mx-8 relative">
           <div className="relative w-full">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            {isSearching ? (
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            )}
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              onFocus={() => setShowSuggestions(true)}
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
               onKeyDown={async (e) => {
                 if (e.key === 'Enter') {
                   if (suggestions.length > 0) {
@@ -198,7 +211,7 @@ export default function Navbar() {
 
           {/* Suggestions Dropdown */}
           <AnimatePresence>
-            {showSuggestions && suggestions.length > 0 && (
+            {showSuggestions && (suggestions.length > 0 || isSearching) && (
               <>
                 <div
                   className="fixed inset-0 z-40"
@@ -210,6 +223,12 @@ export default function Navbar() {
                   exit={{ opacity: 0, y: 10 }}
                   className="absolute left-0 right-0 top-full mt-2 bg-slate-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 max-h-60 overflow-y-auto"
                 >
+                  {isSearching && suggestions.length === 0 && (
+                    <div className="px-4 py-3 text-xs text-slate-500 flex items-center gap-2">
+                      <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                      Searching locations...
+                    </div>
+                  )}
                   {suggestions.map((s, idx) => (
                     <button
                       key={idx}
@@ -436,7 +455,10 @@ export default function Navbar() {
                     <span className="text-sm text-slate-300">{t('profile')}</span>
                   </button>
                   <button
-                    onClick={openProfileModal}
+                    onClick={() => {
+                      setShowProfile(false);
+                      navigate('/app/settings');
+                    }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors text-left"
                   >
                     <Settings size={16} className="text-slate-400" />

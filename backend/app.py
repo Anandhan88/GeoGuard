@@ -18,5 +18,6 @@ app.include_router(disaster_router, prefix="/api/v1/disaster")
 
 if __name__ == "__main__":
     import uvicorn
-    # Pass the app object directly to avoid module naming collision with the app/ directory
+    # Pass the app object directly — can't use string "app:app" because
+    # the app/ package directory shadows the app.py module name
     uvicorn.run(app, host="127.0.0.1", port=8000)

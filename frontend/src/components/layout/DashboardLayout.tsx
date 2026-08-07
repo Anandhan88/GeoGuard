@@ -4,6 +4,7 @@ import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import { useAppStore } from '../../stores/useAppStore';
 import { useRealtimeAlerts } from '../../hooks/useRealtimeAlerts';
+import ErrorBoundary from '../common/ErrorBoundary';
 
 export default function DashboardLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
@@ -27,9 +28,12 @@ export default function DashboardLayout() {
             sidebarOpen ? 'ml-64' : 'ml-20'
           } p-6`}
         >
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
   );
 }
+

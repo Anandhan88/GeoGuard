@@ -16,7 +16,20 @@ export default function PredictionDetail() {
   const predictions = useAppStore((s) => s.predictions);
   const prediction = predictions.find((p) => p.id === id) || predictions[0];
 
-  const factorChartData = prediction.factors.map((f) => ({
+  if (!prediction) {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center">
+        <AlertTriangle size={32} className="text-amber-400 mb-2" />
+        <h3 className="text-base font-bold text-white mb-1">Prediction Not Found</h3>
+        <p className="text-xs text-slate-400 mb-4">The requested prediction details are currently unavailable.</p>
+        <Link to="/app/citizen" className="btn-primary text-xs py-1.5 px-3">
+          Return to Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  const factorChartData = (prediction.factors || []).map((f) => ({
     name: f.name.length > 15 ? f.name.slice(0, 15) + '…' : f.name,
     contribution: f.contribution,
     fullName: f.name,

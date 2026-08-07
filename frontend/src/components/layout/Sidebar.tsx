@@ -28,7 +28,7 @@ const navItems = [
   { label: 'Alerts', translationKey: 'active_alerts', icon: AlertTriangle, path: '/app/alerts', section: 'main', badge: 4 },
   { label: 'Submit Report', translationKey: 'submit_incident_report', icon: FileText, path: '/app/citizen/report', section: 'main', roles: ['citizen', 'volunteer', 'admin'] },
   { label: 'Authority View', translationKey: 'authority_view', icon: Shield, path: '/app/authority', section: 'main', roles: ['authority', 'admin'] },
-  { label: 'Predictions', translationKey: 'top_predictions', icon: Activity, path: '/app/citizen', section: 'intelligence' },
+  { label: 'Predictions', translationKey: 'top_predictions', icon: Activity, path: '/app/prediction/zone-001', section: 'intelligence' },
   { label: 'Satellite', translationKey: 'satellite_imagery', icon: Satellite, path: '/app/satellite', section: 'intelligence' },
   { label: 'Weather Forecasts', translationKey: 'weather_analysis', icon: Cloud, path: '/app/weather', section: 'intelligence' },
   { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority', section: 'intelligence', roles: ['authority', 'admin'] },
@@ -36,8 +36,8 @@ const navItems = [
   { label: 'Shelters', translationKey: 'shelters_active', icon: Building, path: '/app/shelters', section: 'response' },
   { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/authority', section: 'response', roles: ['authority', 'admin'] },
   { label: 'AI Assistant', translationKey: 'ai_assistant', icon: MessageSquare, path: '/app/assistant', section: 'tools' },
-  { label: 'Settings', translationKey: 'settings', icon: Settings, path: '/app/citizen', section: 'system' },
-  { label: 'Help', translationKey: 'help', icon: HelpCircle, path: '/app/citizen', section: 'system' },
+  { label: 'Settings', translationKey: 'settings', icon: Settings, path: '/app/settings', section: 'system' },
+  { label: 'Help', translationKey: 'help', icon: HelpCircle, path: '/app/help', section: 'system' },
 ];
 
 const sections = [
@@ -49,10 +49,11 @@ const sections = [
 ];
 
 export default function Sidebar() {
-  const { sidebarOpen, toggleSidebar, user } = useAppStore();
+  const { sidebarOpen, toggleSidebar, user, predictions } = useAppStore();
   const location = useLocation();
   const { t } = useTranslation();
   const role = user?.role || 'citizen';
+  const topPredId = predictions[0]?.id || 'zone-001';
 
   return (
     <motion.aside
@@ -89,10 +90,12 @@ export default function Sidebar() {
                 </p>
               )}
               {items.map((item) => {
-                const resolvedPath = ['Overview', 'Predictions', 'Settings', 'Help'].includes(item.label)
+                const resolvedPath = item.label === 'Predictions'
+                  ? `/app/prediction/${topPredId}`
+                  : item.label === 'Overview'
                   ? (role === 'authority' || role === 'admin' ? '/app/authority' : '/app/citizen')
                   : item.path;
-                const isActive = location.pathname === resolvedPath;
+                const isActive = location.pathname.startsWith('/app/prediction') ? item.label === 'Predictions' : location.pathname === resolvedPath;
                 const Icon = item.icon;
                 const displayLabel = t(item.translationKey as any) || item.label;
 

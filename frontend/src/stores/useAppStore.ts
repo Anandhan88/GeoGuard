@@ -411,8 +411,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     const loc = get().selectedLocation;
     if (!loc) { set({ weather: null }); return; }
     try {
-      const res = await api.get(`/weather/current?lat=${loc.lat}&lon=${loc.lng}`);
-      set({ weather: res.data, currentWeather: res.data });
+      const [currRes, foreRes] = await Promise.allSettled([
+        api.get(`/weather/current?lat=${loc.lat}&lon=${loc.lng}`),
+        api.get(`/weather/forecast?lat=${loc.lat}&lon=${loc.lng}`),
+      ]);
+
+      const current = currRes.status === 'fulfilled' ? currRes.value.data : null;
+      const forecastData = foreRes.status === 'fulfilled' ? foreRes.value.data : null;
+
+      if (current) {
+        const normalizedWeather = {
+          ...current,
+          temperature: current.temperature ?? 28,
+          humidity: current.humidity ?? 75,
+          rainfall: current.rain ?? current.rainfall ?? 0,
+          windSpeed: current.wind_speed ?? current.windSpeed ?? 12,
+          windDirection: String(current.wind_direction ?? current.windDirection ?? '180°'),
+          pressure: current.surface_pressure ?? current.pressure ?? 1012,
+          visibility: current.visibility ?? 10000,
+          condition: current.condition ?? 'Partly Cloudy',
+          icon: current.icon ?? '⛅',
+          forecast: forecastData?.daily || forecastData?.forecast || current.forecast || [],
+          hourlyForecast: forecastData?.hourly || forecastData?.hourlyForecast || current.hourlyForecast || [],
+        };
+        set({ weather: normalizedWeather as any, currentWeather: current, weatherForecast: forecastData });
+      }
     } catch {
       set({ weather: null });
     }
@@ -517,7 +540,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchSatelliteImages: async () => {
     try {
-      const res = await api.get('/satellite');
+      const res = await api.get('/satellite/');
       set({ satelliteImages: res.data || [] });
     } catch (err) {
       console.error("Failed to fetch satellite images", err);
