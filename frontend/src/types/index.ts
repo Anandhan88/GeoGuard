@@ -102,7 +102,7 @@ export interface CitizenReport {
   id: string;
   userId: string;
   userName: string;
-  type: ReportType;
+  type: ReportType | string;
   description: string;
   severity: number; // 1-5
   imageUrl?: string;
@@ -111,6 +111,10 @@ export interface CitizenReport {
   address?: string;
   createdAt: string;
   upvotes: number;
+  assetRequested?: string;
+  dispatchStatus?: 'pending' | 'dispatched' | 'completed';
+  authorityResponse?: string;
+  respondedAt?: string;
 }
 
 // ===== Shelters =====
@@ -187,6 +191,16 @@ export interface ResourceAllocation {
   medicalTeams: number;
   totalPersonnel: number;
   severity: RiskLevel;
+}
+
+export interface EmergencyResource {
+  id: string;
+  name: string;
+  category: 'vehicles' | 'supplies' | 'medical' | 'power' | 'personnel';
+  quantity: number;
+  available: number;
+  status: 'available' | 'deployed' | 'maintenance';
+  location: string;
 }
 
 // ===== Damage Assessment =====

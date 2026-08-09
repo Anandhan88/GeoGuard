@@ -15,7 +15,9 @@ import {
   Shield,
   Clock,
   Satellite,
+  Phone,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '../utils/api';
 import { useAppStore } from '../stores/useAppStore';
 import { mockWeatherData } from '../data/mockData';
@@ -26,7 +28,7 @@ import {
   formatNumber,
   formatRelativeTime,
 } from '../utils/helpers';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -101,11 +103,13 @@ const rainfallData = [
 
 export default function CitizenDashboard() {
   const { t, lang } = useTranslation();
+  const navigate = useNavigate();
   const {
     predictions,
     alerts,
     shelters,
     reports,
+    resources,
     stats,
     weather: liveWeather,
     fetchPredictions,
@@ -114,10 +118,42 @@ export default function CitizenDashboard() {
     fetchReports,
     fetchStats,
     fetchWeather,
-    selectedLocation
+    selectedLocation,
+    requestAssetEmergencyAssistance
   } = useAppStore();
 
   const [satStatus, setSatStatus] = useState<any>(null);
+  const [requestingAssetId, setRequestingAssetId] = useState<string | null>(null);
+
+  const handleRequestEmergencyAssistance = async (res: any) => {
+    setRequestingAssetId(res.id);
+
+    const lat = selectedLocation?.lat || 11.2715;
+    const lng = selectedLocation?.lng || 77.6066;
+    const addressName = selectedLocation?.name || 'Perundurai, Tamil Nadu, India';
+
+    try {
+      await requestAssetEmergencyAssistance({
+        assetName: res.name,
+        category: res.category,
+        lat,
+        lng,
+        address: addressName
+      });
+
+      toast.success(
+        `Emergency Assistance Requested for '${res.name}'! Authority Command notified at ${addressName.split(',')[0]}.`,
+        { duration: 5000, icon: '🚨' }
+      );
+
+      // Redirect citizen to Resources page to view request & authority response status
+      navigate('/app/resources');
+    } catch (error) {
+      toast.error('Failed to submit asset emergency assistance request.');
+    } finally {
+      setRequestingAssetId(null);
+    }
+  };
 
   const fetchSatelliteInfo = async () => {
     try {
@@ -400,6 +436,144 @@ export default function CitizenDashboard() {
                   <ArrowUpRight size={16} className="text-slate-600 group-hover:text-cyan-400 transition-colors shrink-0" />
                 </motion.div>
               ))}
+            </div>
+          </div>
+
+          {/* Dedicated Citizen Resource Availability Section */}
+          <div className="glass-card-static p-6 border border-cyan-500/20 shadow-2xl bg-slate-950/60 backdrop-blur-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-white/10 pb-4 relative z-10">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <span className="text-xl">🚤</span>
+                  <span className="bg-gradient-to-r from-white via-cyan-200 to-blue-400 bg-clip-text text-transparent">
+                    Emergency Fleet & Relief Supply Availability
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Live rescue boats, ambulances, supply trucks, water purifiers, generators & NDRF teams in <span className="text-cyan-400 font-semibold">{selectedLocation?.name?.split(',')[0] || 'Your Area'}</span>.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] font-mono font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-lg shadow-emerald-500/10">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  LIVE DISPATCH ACTIVE
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+              {resources.map((res) => {
+                const pctAvailable = Math.round((res.available / res.quantity) * 100);
+                const isRequesting = requestingAssetId === res.id;
+                
+                const n = res.name.toLowerCase();
+                let emoji = '📦';
+                let badgeGradient = 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30 text-emerald-400';
+                let tag = 'Relief Pack';
+
+                if (n.includes('boat') || n.includes('motorboat')) {
+                  emoji = '🚤';
+                  badgeGradient = 'from-cyan-500/20 to-blue-500/20 border-cyan-500/30 text-cyan-400';
+                  tag = 'Rescue Boat';
+                } else if (n.includes('ambulance') || res.category === 'medical') {
+                  emoji = '🚑';
+                  badgeGradient = 'from-rose-500/20 to-red-500/20 border-rose-500/30 text-rose-400';
+                  tag = 'Mobile Ambulance';
+                } else if (n.includes('truck') || res.category === 'vehicles') {
+                  emoji = '🚚';
+                  badgeGradient = 'from-amber-500/20 to-orange-500/20 border-amber-500/30 text-amber-400';
+                  tag = 'Supply Truck';
+                } else if (n.includes('team') || n.includes('responder') || res.category === 'personnel') {
+                  emoji = '🛟';
+                  badgeGradient = 'from-purple-500/20 to-indigo-500/20 border-purple-500/30 text-purple-400';
+                  tag = 'Rescue Team';
+                } else if (n.includes('water') || n.includes('purification')) {
+                  emoji = '💧';
+                  badgeGradient = 'from-teal-500/20 to-cyan-500/20 border-teal-500/30 text-teal-400';
+                  tag = 'Water Purification';
+                } else if (n.includes('generator') || res.category === 'power') {
+                  emoji = '⚡';
+                  badgeGradient = 'from-yellow-500/20 to-amber-500/20 border-yellow-500/30 text-yellow-400';
+                  tag = 'Power Genset';
+                }
+
+                return (
+                  <motion.div
+                    key={res.id}
+                    whileHover={{ scale: 1.01 }}
+                    className="p-4 rounded-2xl border border-white/10 bg-slate-900/90 hover:border-cyan-500/40 transition-all space-y-3.5 shadow-xl hover:shadow-cyan-500/10 group"
+                  >
+                    {/* Top Row: Visual Icon, Asset Name, Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Visual Icon Badge */}
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${badgeGradient} border flex items-center justify-center text-2xl shrink-0 shadow-lg group-hover:scale-105 transition-transform`}>
+                          <span>{emoji}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[9px] font-mono uppercase tracking-wider text-cyan-400 font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                              {tag}
+                            </span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                              res.status === 'available' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                              res.status === 'deployed' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                              'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                            }`}>
+                              {res.status.toUpperCase()}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-white mt-1 truncate">{res.name}</h4>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
+                            <MapPin size={10} className="text-slate-500 shrink-0" /> {res.location}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stock Count Pill */}
+                      <div className="text-right shrink-0">
+                        <div className="text-base font-extrabold text-white font-mono flex items-baseline justify-end gap-1">
+                          <span className="text-cyan-400 text-lg">{res.available}</span>
+                          <span className="text-xs text-slate-500">/ {res.quantity}</span>
+                        </div>
+                        <span className="text-[9px] font-semibold text-emerald-400 uppercase tracking-wider block">
+                          Stock Ready
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Availability Bar */}
+                    <div className="space-y-1 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                      <div className="flex items-center justify-between text-[11px] font-mono">
+                        <span className="text-slate-400">Availability Level:</span>
+                        <span className="font-bold text-slate-200">{pctAvailable}% Deployed Ready</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-800 overflow-hidden p-0.5">
+                        <div
+                          className="h-full rounded-full transition-all duration-500 shadow-sm"
+                          style={{
+                            width: `${pctAvailable}%`,
+                            backgroundColor: pctAvailable > 50 ? '#10b981' : pctAvailable > 20 ? '#f59e0b' : '#ef4444',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Button: Transmit Location & Redirect to Authority Page */}
+                    <button
+                      onClick={() => handleRequestEmergencyAssistance(res)}
+                      disabled={isRequesting}
+                      className="w-full btn-primary text-xs py-2.5 justify-center gap-2 font-bold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/20 border-none transition-all disabled:opacity-50"
+                    >
+                      <Phone size={13} className={isRequesting ? 'animate-spin' : 'animate-bounce'} />
+                      <span>{isRequesting ? 'Capturing GPS Location...' : 'Request Asset Emergency Assistance'}</span>
+                      <ArrowUpRight size={13} className="opacity-80" />
+                    </button>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         </div>

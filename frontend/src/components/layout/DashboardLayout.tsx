@@ -9,11 +9,13 @@ import ErrorBoundary from '../common/ErrorBoundary';
 export default function DashboardLayout() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const loadCurrentUser = useAppStore((s) => s.loadCurrentUser);
+  const detectUserLocation = useAppStore((s) => s.detectUserLocation);
 
   useEffect(() => {
-    // Single execution on mount to load user profile without infinite re-render loops
+    // Single execution on mount to load user profile & detect user GPS location automatically
     loadCurrentUser();
-  }, [loadCurrentUser]);
+    detectUserLocation();
+  }, [loadCurrentUser, detectUserLocation]);
 
   // Connect to real-time WebSocket alerts
   useRealtimeAlerts();

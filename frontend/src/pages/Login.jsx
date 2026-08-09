@@ -139,7 +139,7 @@ export default function Login() {
             </div>
             <div className="text-left">
               <h1 className="text-2xl font-bold text-white tracking-tight">
-                GeoGuard<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400"> AI</span>
+                GeoGuard
               </h1>
               <p className="text-xs font-medium text-slate-400">Disaster Intelligence Platform</p>
             </div>
@@ -148,7 +148,7 @@ export default function Login() {
 
         {/* Dual Dashboard Portal Switcher */}
         <div className="bg-slate-900/90 backdrop-blur-2xl border border-slate-800/80 rounded-3xl p-8 shadow-2xl shadow-black/50">
-          
+
           <div className="mb-6">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 text-center">
               Select Login Portal
@@ -157,11 +157,10 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setActivePortal('citizen')}
-                className={`py-3 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1 ${
-                  activePortal === 'citizen'
+                className={`py-3 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1 ${activePortal === 'citizen'
                     ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-1.5">
                   <UserCheck size={16} />
@@ -173,11 +172,10 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setActivePortal('authority')}
-                className={`py-3 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1 ${
-                  activePortal === 'authority'
+                className={`py-3 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex flex-col items-center gap-1 ${activePortal === 'authority'
                     ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20'
                     : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-1.5">
                   <ShieldAlert size={16} />
@@ -292,18 +290,17 @@ export default function Login() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-full py-3.5 px-4 rounded-xl text-white font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-[0.99] disabled:opacity-50 ${
-                activePortal === 'authority'
+              className={`w-full py-3.5 px-4 rounded-xl text-white font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg active:scale-[0.99] disabled:opacity-50 ${activePortal === 'authority'
                   ? 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 shadow-amber-500/20'
                   : 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-cyan-500/20'
-              }`}
+                }`}
             >
               <span>
                 {isSubmitting
                   ? 'Authenticating...'
                   : isLogin
-                  ? `Sign In to ${activePortal === 'authority' ? 'Authority' : 'Citizen'} Dashboard`
-                  : 'Create Account'}
+                    ? `Sign In to ${activePortal === 'authority' ? 'Authority' : 'Citizen'} Dashboard`
+                    : 'Create Account'}
               </span>
               <ArrowRight size={16} />
             </button>

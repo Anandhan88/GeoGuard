@@ -34,7 +34,7 @@ const navItems = [
   { label: 'Impact Analysis', translationKey: 'impact_assessment', icon: BarChart3, path: '/app/authority?tab=impact', section: 'intelligence', roles: ['authority', 'admin'] },
   { label: 'Evacuation', translationKey: 'evacuation_routes', icon: Navigation, path: '/app/evacuation', section: 'response' },
   { label: 'Shelters', translationKey: 'shelters_active', icon: Building, path: '/app/shelters', section: 'response' },
-  { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/authority?tab=resources', section: 'response', roles: ['authority', 'admin'] },
+  { label: 'Resources', translationKey: 'resources', icon: Truck, path: '/app/resources', section: 'response' },
   { label: 'AI Assistant', translationKey: 'ai_assistant', icon: MessageSquare, path: '/app/assistant', section: 'tools' },
   { label: 'Settings', translationKey: 'settings', icon: Settings, path: '/app/settings', section: 'system' },
   { label: 'Help', translationKey: 'help', icon: HelpCircle, path: '/app/help', section: 'system' },

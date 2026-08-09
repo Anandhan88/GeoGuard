@@ -32,23 +32,47 @@ export default function AuthorityDashboard() {
     predictions,
     reports,
     stats,
+    resources,
+    updateResource,
+    addResource,
     fetchPredictions,
     fetchReports,
     fetchStats,
     verifyReport,
     triggerPredictions,
+    respondToEmergencyRequest,
     isLoading
   } = useAppStore();
 
+  const [showAddResourceModal, setShowAddResourceModal] = useState(false);
+  const [newResource, setNewResource] = useState({
+    name: '',
+    category: 'vehicles' as 'vehicles' | 'supplies' | 'medical' | 'power' | 'personnel',
+    quantity: 10,
+    available: 10,
+    status: 'available' as 'available' | 'deployed' | 'maintenance',
+    location: 'Central Relief Command',
+  });
+
   const [selectedReportImage, setSelectedReportImage] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchPredictions();
-    fetchReports();
-    fetchStats();
-  }, []);
+  const selectedLocation = useAppStore((s) => s.selectedLocation);
 
-  if (!user || (user.role !== 'authority' && user.role !== 'admin')) {
+  const isEmergencyMode = searchParams.get('emergency') === 'true' || Boolean(searchParams.get('reqId'));
+  const emLat = searchParams.get('lat') ? parseFloat(searchParams.get('lat')!) : null;
+  const emLng = searchParams.get('lng') ? parseFloat(searchParams.get('lng')!) : null;
+  const emAsset = searchParams.get('asset') || 'Emergency Asset';
+  const emAddress = searchParams.get('address') || 'Citizen GPS Location';
+
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchPredictions();
+      fetchReports();
+      fetchStats();
+    }
+  }, [selectedLocation]);
+
+  if (!user || (user.role !== 'authority' && user.role !== 'admin' && !isEmergencyMode)) {
     return <Navigate to="/app/citizen" replace />;
   }
 
@@ -68,7 +92,7 @@ export default function AuthorityDashboard() {
     };
   });
 
-  const primaryPrediction = predictions.find((p) => p.zoneId === 'zone-001') || predictions[0];
+  const primaryPrediction = predictions[0];
   const impactRadarData = primaryPrediction
     ? [
         { subject: 'Population', value: Math.min(100, Math.round(primaryPrediction.affectedPopulation / 500)) },
@@ -110,23 +134,6 @@ export default function AuthorityDashboard() {
       agriculturalAreaHa: agri,
       impactScore: p.riskScore,
       economicLossEstimate: loss,
-    };
-  });
-
-  const resourceAllocations = predictions.map((p) => {
-    const boats = p.riskScore >= 80 ? 12 : p.riskScore >= 60 ? 8 : 2;
-    const ambulances = p.riskScore >= 80 ? 8 : p.riskScore >= 60 ? 5 : 1;
-    const trucks = p.riskScore >= 80 ? 6 : p.riskScore >= 60 ? 4 : 2;
-    const medical = p.riskScore >= 80 ? 4 : p.riskScore >= 60 ? 2 : 1;
-    return {
-      zoneId: p.zoneId,
-      zoneName: p.zoneName,
-      ambulances,
-      rescueBoats: boats,
-      reliefTrucks: trucks,
-      medicalTeams: medical,
-      totalPersonnel: (boats + ambulances + trucks + medical) * 10,
-      severity: p.riskLevel,
     };
   });
 
@@ -200,6 +207,87 @@ export default function AuthorityDashboard() {
           </button>
         </div>
       </div>
+
+      {/* ─── LIVE CITIZEN EMERGENCY ASSET REQUEST ALERT BANNER ─── */}
+      {isEmergencyMode && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98, y: -10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="p-5 rounded-2xl bg-gradient-to-r from-red-950/80 via-rose-900/60 to-slate-900 border-2 border-red-500/50 shadow-2xl shadow-red-950/50 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 px-4 py-1 bg-red-600 text-white font-mono text-[10px] font-bold rounded-bl-xl tracking-wider uppercase flex items-center gap-1.5 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+            LIVE CITIZEN GPS LOCATION TRANSMITTED
+          </div>
+
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0 text-2xl shadow-lg animate-bounce">
+                🚨
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-lg font-bold text-white">CITIZEN ASSET EMERGENCY ASSISTANCE REQUEST</h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/30 text-red-300 border border-red-500/40">
+                    PRIORITY LEVEL 5 (CRITICAL)
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 mt-1">
+                  Requested Asset: <span className="font-bold text-cyan-300 underline">{emAsset}</span>
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-200 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10 font-mono">
+                    <MapPin size={14} className="text-red-400 shrink-0" />
+                    <span>Location: {emAddress}</span>
+                  </div>
+                  {emLat && emLng && (
+                    <div className="flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 font-mono font-bold">
+                      <span>GPS: {emLat.toFixed(4)}, {emLng.toFixed(4)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={async () => {
+                  const reqId = searchParams.get('reqId') || 'active';
+                  const dispatchMsg = `Authority Dispatched 1 Unit of '${emAsset}' to your location (${emAddress})! Responders En Route (ETA: ~8 mins).`;
+                  await respondToEmergencyRequest(reqId, dispatchMsg);
+                  toast.success(`Asset '${emAsset}' dispatched to citizen location (${emLat?.toFixed(3)}, ${emLng?.toFixed(3)})! Rescue Team & NDRF Unit En Route!`, { duration: 6000, icon: '🚤' });
+                }}
+                className="btn-primary text-xs py-2.5 px-4 gap-2 font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border-none shadow-lg shadow-emerald-600/30"
+              >
+                <Send size={14} /> Dispatch {emAsset} Now
+              </button>
+
+              {emLat && emLng && (
+                <button
+                  onClick={() => navigate(`/app/map?lat=${emLat}&lng=${emLng}&emergency=true&asset=${encodeURIComponent(emAsset)}`)}
+                  className="btn-secondary text-xs py-2.5 px-3 gap-1.5 font-bold border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10"
+                >
+                  <Navigation size={14} /> View Citizen on Map
+                </button>
+              )}
+
+              <button
+                onClick={async () => {
+                  const reqId = searchParams.get('reqId') || 'active';
+                  const ackMsg = `Emergency Authority acknowledged your request for '${emAsset}' and assigned NDRF Responder Team!`;
+                  await respondToEmergencyRequest(reqId, ackMsg);
+                  toast.success(`Citizen notified: Emergency Authority acknowledged request and assigned responder team!`);
+                }}
+                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-bold text-xs border border-white/10 flex items-center gap-1.5"
+              >
+                <CheckCircle2 size={14} className="text-emerald-400" /> Acknowledge
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Navigation Tabs Bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
@@ -453,61 +541,291 @@ export default function AuthorityDashboard() {
         </div>
       )}
 
-      {/* ─── 3. DEDICATED RESOURCE DEPLOYMENT TAB ONLY ─── */}
+      {/* ─── 3. DEDICATED RESOURCE DEPLOYMENT & AVAILABILITY CONTROL TAB ─── */}
       {activeTab === 'resources' && (
         <div className="space-y-6">
-          <div className="glass-card-static p-6 border border-white/10">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-              <div>
-                <h3 className="text-base font-semibold text-white">Emergency Fleet & Rescue Resource Allocation Control</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Optimized resource distribution based on flood risk severity</p>
-              </div>
-              <button
-                onClick={() => toast.success('Rescue fleet allocation optimized across all zones!')}
-                className="btn-primary text-xs py-2 px-4 gap-2"
-              >
-                <Target size={14} /> Re-Optimize Fleet Distribution
-              </button>
+          {/* Header & Add Resource Bar */}
+          <div className="glass-card-static p-6 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Truck size={20} className="text-emerald-400" />
+                Emergency Fleet & Resource Availability Control
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Authorities can edit available stock, dispatch equipment, and manage deployment status across all command centers.
+              </p>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {resourceAllocations.map((alloc) => (
-                <div
-                  key={alloc.zoneId}
-                  className="p-4 rounded-xl border border-white/5 bg-slate-900/60 hover:border-white/10 transition-colors space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold text-white">{alloc.zoneName}</h4>
-                    <span className={`badge ${getRiskBadgeClass(alloc.severity)}`}>
-                      {alloc.severity}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Ambulances', value: alloc.ambulances, icon: '🚑' },
-                      { label: 'Rescue Boats', value: alloc.rescueBoats, icon: '🚤' },
-                      { label: 'Relief Trucks', value: alloc.reliefTrucks, icon: '🚛' },
-                      { label: 'Medical Teams', value: alloc.medicalTeams, icon: '👨‍⚕️' },
-                    ].map((res) => (
-                      <div key={res.label} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03]">
-                        <span className="text-base">{res.icon}</span>
-                        <div>
-                          <p className="text-[10px] text-slate-500">{res.label}</p>
-                          <p className="text-sm font-bold text-white">{res.value}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Total Personnel Deployed</span>
-                    <span className="font-bold text-cyan-400">{alloc.totalPersonnel} Officers</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <button
+              onClick={() => setShowAddResourceModal(true)}
+              className="btn-primary text-xs py-2.5 px-4 gap-2 shrink-0 font-bold"
+            >
+              + Add New Resource Asset
+            </button>
           </div>
+
+          {/* Interactive Resource Inventory Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {resources.map((res) => {
+              const pctAvailable = Math.round((res.available / res.quantity) * 100);
+              return (
+                <div
+                  key={res.id}
+                  className="p-5 rounded-xl border border-white/10 bg-slate-900/80 hover:border-emerald-500/30 transition-all space-y-4 shadow-xl"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                        {res.category}
+                      </span>
+                      <h4 className="text-sm font-bold text-white mt-1.5">{res.name}</h4>
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <MapPin size={10} className="text-slate-500" /> {res.location}
+                      </p>
+                    </div>
+                    {/* Status Dropdown selector for Authorities */}
+                    <select
+                      value={res.status}
+                      onChange={(e) => {
+                        updateResource(res.id, { status: e.target.value as any });
+                        toast.success(`Resource status updated to ${e.target.value.toUpperCase()}`);
+                      }}
+                      className={`text-xs font-bold px-2 py-1 rounded-md border focus:outline-none cursor-pointer ${
+                        res.status === 'available' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                        res.status === 'deployed' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                        'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      }`}
+                    >
+                      <option value="available" className="bg-slate-900 text-emerald-400">AVAILABLE</option>
+                      <option value="deployed" className="bg-slate-900 text-blue-400">DEPLOYED</option>
+                      <option value="maintenance" className="bg-slate-900 text-amber-400">MAINTENANCE</option>
+                    </select>
+                  </div>
+
+                  {/* Stock Availability Bar & Controls */}
+                  <div className="space-y-1.5 p-3 rounded-lg bg-white/[0.03] border border-white/5">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400">Available Stock:</span>
+                      <span className="font-bold text-white">
+                        {res.available} / {res.quantity} ({pctAvailable}%)
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${pctAvailable}%`,
+                          backgroundColor: pctAvailable > 50 ? '#10b981' : pctAvailable > 20 ? '#f59e0b' : '#ef4444',
+                        }}
+                      />
+                    </div>
+
+                    {/* Authority Quantity Edit Controls */}
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-[11px] text-slate-400 font-semibold">Stock Controls:</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            if (res.available > 0) {
+                              updateResource(res.id, { available: res.available - 1 });
+                              toast.success(`Decreased available stock for ${res.name}`);
+                            }
+                          }}
+                          className="w-7 h-7 rounded bg-white/5 hover:bg-white/10 text-white font-bold text-sm flex items-center justify-center border border-white/10"
+                          title="Decrease available count by 1"
+                        >
+                          -
+                        </button>
+                        <span className="px-2 font-mono text-xs font-bold text-cyan-400">{res.available}</span>
+                        <button
+                          onClick={() => {
+                            if (res.available < res.quantity) {
+                              updateResource(res.id, { available: res.available + 1 });
+                              toast.success(`Increased available stock for ${res.name}`);
+                            }
+                          }}
+                          className="w-7 h-7 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 font-bold text-sm flex items-center justify-center border border-emerald-500/30"
+                          title="Increase available count by 1"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dispatch Quick Action Button */}
+                  <button
+                    onClick={() => {
+                      if (res.available > 0) {
+                        updateResource(res.id, { available: res.available - 1, status: 'deployed' });
+                        toast.success(`Dispatched 1 unit of ${res.name} to flood rescue zone!`);
+                      } else {
+                        toast.error(`No available stock for ${res.name}`);
+                      }
+                    }}
+                    disabled={res.available === 0}
+                    className="w-full btn-primary text-xs py-2 justify-center gap-2 font-bold disabled:opacity-40"
+                  >
+                    <Send size={13} />
+                    <span>Dispatch Asset to Rescue Zone</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add Resource Modal */}
+          <AnimatePresence>
+            {showAddResourceModal && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowAddResourceModal(false)}
+                  className="absolute inset-0 bg-black/70 backdrop-blur-md"
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                  className="relative w-full max-w-lg glass-card-static p-6 shadow-2xl border border-white/10 z-10"
+                >
+                  <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <Truck size={18} className="text-emerald-400" />
+                      Add New Emergency Asset to Fleet
+                    </h3>
+                    <button
+                      onClick={() => setShowAddResourceModal(false)}
+                      className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!newResource.name) {
+                        toast.error('Please enter resource name');
+                        return;
+                      }
+                      addResource({
+                        id: `res-${Date.now()}`,
+                        name: newResource.name,
+                        category: newResource.category,
+                        quantity: Number(newResource.quantity),
+                        available: Number(newResource.available),
+                        status: newResource.status,
+                        location: newResource.location,
+                      });
+                      toast.success(`Resource ${newResource.name} added to Authority Fleet!`);
+                      setShowAddResourceModal(false);
+                      setNewResource({
+                        name: '',
+                        category: 'vehicles',
+                        quantity: 10,
+                        available: 10,
+                        status: 'available',
+                        location: 'Central Relief Command',
+                      });
+                    }}
+                    className="space-y-4 text-xs"
+                  >
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Asset Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Inflatable Rubber Rescue Boats (40HP)"
+                        value={newResource.name}
+                        onChange={(e) => setNewResource({ ...newResource, name: e.target.value })}
+                        className="input-field py-2"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">Category</label>
+                        <select
+                          value={newResource.category}
+                          onChange={(e) => setNewResource({ ...newResource, category: e.target.value as any })}
+                          className="input-field py-2 text-white bg-slate-900"
+                        >
+                          <option value="vehicles">Vehicles & Boats</option>
+                          <option value="supplies">Relief Supplies</option>
+                          <option value="medical">Medical Equipment</option>
+                          <option value="power">Power & Generators</option>
+                          <option value="personnel">Personnel & Officers</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">Command Depot Location</label>
+                        <input
+                          type="text"
+                          value={newResource.location}
+                          onChange={(e) => setNewResource({ ...newResource, location: e.target.value })}
+                          className="input-field py-2"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">Total Quantity</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={newResource.quantity}
+                          onChange={(e) => setNewResource({ ...newResource, quantity: Number(e.target.value) })}
+                          className="input-field py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">Available Quantity</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={newResource.quantity}
+                          value={newResource.available}
+                          onChange={(e) => setNewResource({ ...newResource, available: Number(e.target.value) })}
+                          className="input-field py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">Initial Status</label>
+                        <select
+                          value={newResource.status}
+                          onChange={(e) => setNewResource({ ...newResource, status: e.target.value as any })}
+                          className="input-field py-2 text-white bg-slate-900"
+                        >
+                          <option value="available">Available</option>
+                          <option value="deployed">Deployed</option>
+                          <option value="maintenance">Maintenance</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddResourceModal(false)}
+                        className="btn-secondary text-xs py-2 px-4"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn-primary text-xs py-2 px-4 font-bold">
+                        Save Asset
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 

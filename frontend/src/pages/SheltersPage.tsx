@@ -20,7 +20,7 @@ const AMENITY_ICONS: Record<string, React.ReactNode> = {
 };
 
 export default function SheltersPage() {
-  const { user, shelters, fetchShelters, updateShelterOccupancy, createShelter, isLoading, selectedLocation } = useAppStore();
+  const { user, shelters, fetchShelters, updateShelterOccupancy, updateShelter, createShelter, isLoading, selectedLocation } = useAppStore();
   const isAuthority = user?.role === 'authority' || user?.role === 'admin';
 
   const [search, setSearch] = useState('');
@@ -28,8 +28,9 @@ export default function SheltersPage() {
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [selectedShelter, setSelectedShelter] = useState<any>(null);
 
-  // Authority Modal State for Add Shelter
+  // Authority Modal State for Add / Edit Shelter
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingShelter, setEditingShelter] = useState<any>(null);
   const [newShelter, setNewShelter] = useState({
     name: '',
     type: 'school',
@@ -297,7 +298,7 @@ export default function SheltersPage() {
 
               {/* Authority Only Management Controls */}
               {isAuthority && (
-                <div className="mt-3 pt-3 border-t border-white/5 bg-slate-950/40 p-2 rounded-lg space-y-2">
+                <div className="mt-3 pt-3 border-t border-white/5 bg-slate-950/40 p-2.5 rounded-lg space-y-2">
                   <div className="flex items-center justify-between text-[10px]">
                     <span className="text-slate-400 flex items-center gap-1">
                       <UserCheck size={11} className="text-cyan-400" />
@@ -306,16 +307,27 @@ export default function SheltersPage() {
                     <span className="font-bold text-white">NDRF Relief Officer</span>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-[10px] text-slate-400">Authority Occupancy Control:</span>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                    <span className="text-[10px] text-slate-400">Quick Occupancy:</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          updateShelterOccupancy(shelter.id, Math.max(0, shelter.currentOccupancy - 10));
-                          toast.success('Occupancy updated');
+                          updateShelterOccupancy(shelter.id, Math.max(0, shelter.currentOccupancy - 50));
+                          toast.success('Occupancy updated (-50)');
                         }}
-                        className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-white rounded font-bold text-xs"
+                        className="px-1.5 py-0.5 bg-white/5 hover:bg-white/10 text-white rounded font-bold text-[10px]"
+                        title="Reduce occupancy by 50"
+                      >
+                        -50
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateShelterOccupancy(shelter.id, Math.max(0, shelter.currentOccupancy - 10));
+                          toast.success('Occupancy updated (-10)');
+                        }}
+                        className="px-1.5 py-0.5 bg-white/5 hover:bg-white/10 text-white rounded font-bold text-[10px]"
                         title="Reduce occupancy by 10"
                       >
                         -10
@@ -324,15 +336,36 @@ export default function SheltersPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           updateShelterOccupancy(shelter.id, Math.min(shelter.capacity, shelter.currentOccupancy + 10));
-                          toast.success('Occupancy updated');
+                          toast.success('Occupancy updated (+10)');
                         }}
-                        className="px-2 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded font-bold text-xs border border-emerald-500/30"
+                        className="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded font-bold text-[10px] border border-emerald-500/30"
                         title="Increase occupancy by 10"
                       >
                         +10
                       </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateShelterOccupancy(shelter.id, Math.min(shelter.capacity, shelter.currentOccupancy + 50));
+                          toast.success('Occupancy updated (+50)');
+                        }}
+                        className="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded font-bold text-[10px] border border-emerald-500/30"
+                        title="Increase occupancy by 50"
+                      >
+                        +50
+                      </button>
                     </div>
                   </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingShelter({ ...shelter });
+                    }}
+                    className="w-full mt-1.5 btn-secondary text-[11px] py-1.5 justify-center gap-1.5 font-bold"
+                  >
+                    <span>Edit Shelter Details & Capacity</span>
+                  </button>
                 </div>
               )}
 
@@ -493,6 +526,127 @@ export default function SheltersPage() {
                   </button>
                   <button type="submit" className="btn-primary py-2 px-4 gap-2">
                     <Save size={14} /> Save Shelter
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Shelter Modal for Authority */}
+      <AnimatePresence>
+        {editingShelter && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingShelter(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg glass-card-static p-6 shadow-2xl border border-white/10 z-10"
+            >
+              <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Building size={18} className="text-emerald-400" />
+                  Edit Relief Shelter Details & Capacity
+                </h3>
+                <button
+                  onClick={() => setEditingShelter(null)}
+                  className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await updateShelter(editingShelter.id, {
+                    name: editingShelter.name,
+                    capacity: Number(editingShelter.capacity),
+                    currentOccupancy: Number(editingShelter.currentOccupancy),
+                    address: editingShelter.address,
+                    contact: editingShelter.contact,
+                  });
+                  toast.success(`Shelter "${editingShelter.name}" updated successfully!`);
+                  setEditingShelter(null);
+                }}
+                className="space-y-4 text-xs"
+              >
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Shelter Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingShelter.name}
+                    onChange={(e) => setEditingShelter({ ...editingShelter, name: e.target.value })}
+                    className="input-field py-2"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Max Capacity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={editingShelter.capacity}
+                      onChange={(e) => setEditingShelter({ ...editingShelter, capacity: Number(e.target.value) })}
+                      className="input-field py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Current Occupancy</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={editingShelter.capacity}
+                      required
+                      value={editingShelter.currentOccupancy}
+                      onChange={(e) => setEditingShelter({ ...editingShelter, currentOccupancy: Number(e.target.value) })}
+                      className="input-field py-2"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Street Address</label>
+                  <input
+                    type="text"
+                    value={editingShelter.address || ''}
+                    onChange={(e) => setEditingShelter({ ...editingShelter, address: e.target.value })}
+                    className="input-field py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Emergency Helpline Contact</label>
+                  <input
+                    type="text"
+                    value={editingShelter.contact || ''}
+                    onChange={(e) => setEditingShelter({ ...editingShelter, contact: e.target.value })}
+                    className="input-field py-2"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setEditingShelter(null)}
+                    className="btn-secondary text-xs py-2 px-4"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary text-xs py-2 px-4 font-bold gap-2">
+                    <Save size={14} /> Update Shelter
                   </button>
                 </div>
               </form>

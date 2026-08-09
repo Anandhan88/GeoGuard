@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import toast from 'react-hot-toast';
 import {
   Bell,
   Shield,
@@ -14,6 +15,7 @@ import {
   LogOut,
   Settings,
   Bot,
+  Compass,
 } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 import { getAlertSeverityColor, formatRelativeTime } from '../../utils/helpers';
@@ -34,6 +36,7 @@ export default function Navbar() {
     updateProfile,
     selectedLocation,
     setSelectedLocation,
+    detectUserLocation,
   } = useAppStore();
   const [showAlerts, setShowAlerts] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -44,8 +47,31 @@ export default function Navbar() {
   const [isSearching, setIsSearching] = useState(false);
   const debounceTimeoutRef = useRef<any>(null);
 
+  // Refs for click outside detection
+  const languageRef = useRef<HTMLDivElement>(null);
+  const alertsRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (languageRef.current && !languageRef.current.contains(event.target as Node)) {
+        setShowLanguageDropdown(false);
+      }
+      if (alertsRef.current && !alertsRef.current.contains(event.target as Node)) {
+        setShowAlerts(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setShowProfile(false);
+      }
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current);
       }
@@ -155,18 +181,35 @@ export default function Navbar() {
             </div>
             <div className="hidden md:block">
               <h1 className="text-base font-bold text-white leading-tight">
-                GeoGuard<span className="text-cyan-400"> AI</span>
+                GeoGuard
               </h1>
               <p className="text-[10px] text-slate-500 leading-tight">{t('disaster_intelligence')}</p>
             </div>
           </Link>
         </div>
 
-        {/* Center - Search */}
-        <div className="hidden lg:flex flex-1 max-w-md mx-8 relative">
-          <div className="relative w-full">
+        {/* Center - Search & Geolocation */}
+        <div ref={searchRef} className="hidden lg:flex flex-1 max-w-lg mx-6 items-center gap-2 relative">
+          <button
+            type="button"
+            onClick={async () => {
+              setSearchQuery('');
+              setSuggestions([]);
+              setShowSuggestions(false);
+              toast.loading('Locating GPS position & loading reports...', { id: 'gps-locate' });
+              await detectUserLocation();
+              toast.success('Returned to current location reports!', { id: 'gps-locate' });
+            }}
+            className="p-2 rounded-lg bg-surface hover:bg-accent-primary/20 text-accent-primary border border-white/10 transition-colors flex items-center gap-1.5 shrink-0 text-xs font-mono cursor-pointer"
+            title="Return to My Current Location (GPS)"
+          >
+            <Compass size={15} className="animate-pulse" />
+            <span className="hidden xl:inline text-[11px]">GPS AUTO</span>
+          </button>
+
+          <div className="relative flex-1">
             {isSearching ? (
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
             ) : (
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             )}
@@ -191,8 +234,8 @@ export default function Navbar() {
                   }
                 }
               }}
-              placeholder={t('search_placeholder')}
-              className="input-field pl-10 pr-10 py-2 text-sm bg-white/5 w-full"
+              placeholder={selectedLocation ? `📍 ${selectedLocation.name.split(',')[0]} (or search location...)` : t('search_placeholder')}
+              className="input-field pl-10 pr-10 py-2 text-sm bg-white/5 w-full font-sans"
               id="global-search"
               autoComplete="off"
             />
@@ -203,6 +246,7 @@ export default function Navbar() {
                   setSearchQuery('');
                 }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10"
+                title="Clear selected location"
               >
                 <X size={14} />
               </button>
@@ -262,7 +306,7 @@ export default function Navbar() {
           )}
 
           {/* Language Selector Dropdown */}
-          <div className="relative">
+          <div ref={languageRef} className="relative">
             <button
               onClick={() => {
                 setShowLanguageDropdown(!showLanguageDropdown);
@@ -330,7 +374,7 @@ export default function Navbar() {
             <span className="hidden lg:inline text-xs font-medium">{t('ai_assistant')}</span>
           </Link>
 
-          <div className="relative">
+          <div ref={alertsRef} className="relative">
             <button
               onClick={() => {
                 setShowAlerts(!showAlerts);
@@ -418,7 +462,7 @@ export default function Navbar() {
           </div>
 
           {/* Profile Dropdown */}
-          <div className="relative">
+          <div ref={profileRef} className="relative">
             <button
               onClick={() => {
                 setShowProfile(!showProfile);

@@ -52,7 +52,7 @@ async def list_reports(
             "imageUrl": r.image_url or "/demo/flood-1.jpg",
             "verified": r.verified,
             "location": {"lat": lat, "lng": lng},
-            "address": f"Chennai ({lat:.3f}, {lng:.3f})",
+            "address": f"Perundurai, Tamil Nadu ({lat:.3f}, {lng:.3f})" if 11.0 <= lat <= 12.0 else f"Perundurai ({lat:.3f}, {lng:.3f})",
             "createdAt": r.created_at.isoformat() + "Z" if r.created_at else None,
             "upvotes": 0
         })
@@ -127,7 +127,7 @@ async def create_report(
             "imageUrl": new_report.image_url or "/demo/flood-1.jpg",
             "verified": new_report.verified,
             "location": {"lat": lat, "lng": lng},
-            "address": f"Tamil Nadu ({lat:.3f}, {lng:.3f})",
+            "address": f"Perundurai, Tamil Nadu ({lat:.3f}, {lng:.3f})",
             "createdAt": new_report.created_at.isoformat() + "Z",
             "upvotes": 0
         }

@@ -43,6 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     console.log("AuthContext Loaded");
 
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 300);
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setFirebaseUser(currentUser);
 
@@ -61,7 +65,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, [storeLogin]);
 
   // Google Sign In using signInWithPopup()

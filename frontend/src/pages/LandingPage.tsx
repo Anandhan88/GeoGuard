@@ -15,414 +15,659 @@ import {
   Zap,
   Globe,
   Eye,
-  Activity,
   Layers,
   ArrowRight,
+  ArrowUpRight,
   Building,
   Truck,
+  Menu,
+  X,
+  Waves,
+  Mountain,
+  CloudLightning,
+  Droplets,
+  Cpu,
+  FileText,
 } from 'lucide-react';
 
+/* ─── DATA ─── */
 const features = [
+  { icon: Brain, title: 'AI Disaster Prediction', tag: 'PREDICTIVE AI', desc: 'XGBoost & LSTM neural networks analyze satellite, weather, and environmental telemetry to forecast catastrophe risks.' },
+  { icon: AlertTriangle, title: 'Real-Time Early Alerts', tag: 'SUB-3 MINUTE', desc: 'Automated multi-channel alerts with precise severity classification reaching authorities and public before impact.' },
+  { icon: Satellite, title: 'Satellite Imagery Vision', tag: 'U-NET & SEGFORMER', desc: 'Deep computer vision models process Sentinel & Landsat satellite imagery for flood extent and damage detection.' },
+  { icon: Map, title: 'Live Risk Mapping', tag: 'HYPERLOCAL', desc: 'Dynamic hazard heatmaps displaying real-time inundation zones, shelter locations, and safe passage corridors.' },
+  { icon: Navigation, title: 'AI Evacuation Routing', tag: 'A* PATHFINDING', desc: 'Generates optimal evacuation routes avoiding active hazard areas with real-time road accessibility awareness.' },
+  { icon: Truck, title: 'Resource Optimization', tag: 'LOGISTICS AI', desc: 'Intelligent emergency supply & vehicle dispatch recommendation engine based on predicted impact severity.' },
+];
+
+const modules = [
+  { icon: Brain, label: 'Risk Prediction', num: 'MOD-01', desc: 'Multi-hazard ML probability forecasting' },
+  { icon: Waves, label: 'Flood Intelligence', num: 'MOD-02', desc: 'Hydrodynamic inundation depth modeling' },
+  { icon: Satellite, label: 'Satellite Analysis', num: 'MOD-03', desc: 'Orbital imagery damage segmentation' },
+  { icon: Users, label: 'Citizen Incident SOS', num: 'MOD-04', desc: 'Crowdsourced ground-truth verification' },
+  { icon: Eye, label: 'Damage Assessment', num: 'MOD-05', desc: 'AI structural impact & loss estimation' },
+  { icon: BarChart3, label: 'Impact Analytics', num: 'MOD-06', desc: 'Population & infrastructure exposure engine' },
+  { icon: Navigation, label: 'Evacuation AI', num: 'MOD-07', desc: 'Dynamic routing avoiding flooded roads' },
+  { icon: Building, label: 'Shelter Locator', num: 'MOD-08', desc: 'Real-time capacity & supply monitoring' },
+  { icon: Truck, label: 'Resource Dispatch', num: 'MOD-09', desc: 'Emergency logistics prioritization' },
+  { icon: Zap, label: 'Explainable AI', num: 'MOD-10', desc: 'Transparent model decision confidence' },
+  { icon: MessageSquare, label: 'AI Assistant', num: 'MOD-[#11]', desc: 'Conversational emergency guidance' },
+  { icon: Radio, label: 'Voice SOS Broadcast', num: 'MOD-12', desc: 'Automated multi-lingual alert voice alerts' },
+];
+
+const riskCards = [
+  { label: 'Cyclone Risk', level: 'HIGH', color: '#FF5C5C', x: 'left-[52%] top-[8%]', icon: CloudLightning },
+  { label: 'Flood Risk', level: 'MODERATE', color: '#F5B83D', x: 'right-[2%] top-[45%]', icon: Droplets },
+  { label: 'Earthquake Risk', level: 'LOW', color: '#28D7A1', x: 'left-[48%] bottom-[12%]', icon: Mountain },
+];
+
+const whatWeDo = [
   {
-    icon: Brain,
-    title: 'AI Risk Prediction',
-    description: 'XGBoost & LSTM models predict disaster probability with hyperlocal precision before events occur.',
-    color: '#3b82f6',
-    gradient: 'from-blue-500 to-cyan-500',
+    num: '01', title: 'PREDICT', img: '/images/predict-card.png',
+    desc: 'Deep learning models process atmospheric and satellite data streams to forecast disaster timing and risk zones.',
+    icon: Brain, color: '#19D3AE',
   },
   {
-    icon: Map,
-    title: 'Interactive Risk Maps',
-    description: 'Real-time heatmaps, flood zones, shelter locations, and evacuation routes on interactive maps.',
-    color: '#10b981',
-    gradient: 'from-emerald-500 to-teal-500',
+    num: '02', title: 'ALERT', img: '/images/alert-card.png',
+    desc: 'Instant broadcast engine pushes emergency warnings to citizens and emergency authorities in under 3 minutes.',
+    icon: AlertTriangle, color: '#FF5C5C',
   },
   {
-    icon: AlertTriangle,
-    title: 'Early Warning System',
-    description: 'Automated multi-channel alerts with severity levels, reaching citizens minutes before impact.',
-    color: '#f59e0b',
-    gradient: 'from-amber-500 to-orange-500',
+    num: '03', title: 'RESPOND', img: '/images/respond-card.png',
+    desc: 'Actionable mission intelligence optimizes rescue boat, ambulance, and supply allocation for rapid deployment.',
+    icon: Users, color: '#20B8E8',
   },
   {
-    icon: Satellite,
-    title: 'Satellite Analysis',
-    description: 'U-Net & SegFormer analyze satellite imagery for flood detection, fire tracking, and damage assessment.',
-    color: '#8b5cf6',
-    gradient: 'from-purple-500 to-pink-500',
-  },
-  {
-    icon: Navigation,
-    title: 'Smart Evacuation',
-    description: 'A* pathfinding generates safe evacuation routes avoiding flood zones with real-time traffic awareness.',
-    color: '#06b6d4',
-    gradient: 'from-cyan-500 to-blue-500',
-  },
-  {
-    icon: Eye,
-    title: 'Explainable AI',
-    description: 'Every prediction includes transparent reasoning — what factors contributed and confidence levels.',
-    color: '#ec4899',
-    gradient: 'from-pink-500 to-rose-500',
+    num: '04', title: 'ANALYZE', img: '/images/analyze-card.png',
+    desc: 'Post-event damage assessment and historical pattern analysis continuously strengthen future preparedness.',
+    icon: BarChart3, color: '#F5B83D',
   },
 ];
 
-const stats = [
-  { value: '99.2%', label: 'Prediction Accuracy', icon: Activity },
-  { value: '< 3min', label: 'Alert Delivery', icon: Zap },
-  { value: '12+', label: 'Disaster Types', icon: Layers },
-  { value: '3', label: 'Languages', icon: Globe },
+const resources = [
+  { icon: FileText, title: 'Disaster SOP Guides', category: 'PROTOCOLS', desc: 'Standard operating procedures for flood, cyclone, and seismic emergency management.' },
+  { icon: AlertTriangle, title: 'Citizen Preparedness', category: 'SAFETY', desc: 'Evacuation checklists, emergency kit guidelines, and family survival protocols.' },
+  { icon: BarChart3, title: 'Disaster Trend Reports', category: 'RESEARCH', desc: 'In-depth historical risk evaluations and climate vulnerability analytics.' },
+  { icon: Cpu, title: 'Developer API Docs', category: 'INTEGRATION', desc: 'REST & WebSocket APIs for embedding GeoGuard intelligence into external systems.' },
 ];
 
-const floatingParticles = Array.from({ length: 20 }, (_, i) => ({
-  id: i,
-  size: Math.random() * 4 + 2,
-  x: Math.random() * 100,
-  y: Math.random() * 100,
-  duration: Math.random() * 20 + 10,
-  delay: Math.random() * 5,
-}));
-
+/* ─── COMPONENT ─── */
 export default function LandingPage() {
   const [scrollY, setScrollY] = useState(0);
+  const [mobileMenu, setMobileMenu] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   return (
-    <div className="min-h-screen bg-bg-primary overflow-hidden">
-      {/* Navigation */}
+    <div className="min-h-screen bg-bg-primary overflow-hidden font-sans">
+
+      {/* ═══════ NAVBAR ═══════ */}
       <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrollY > 50
-            ? 'bg-bg-primary/80 backdrop-blur-xl border-b border-white/5'
-            : 'bg-transparent'
-        }`}
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrollY > 50
+          ? 'bg-bg-primary/90 backdrop-blur-xl border-b border-white/[0.08]'
+          : 'bg-transparent'
+          }`}
       >
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-3 group" aria-label="GeoGuard AI Home">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-shadow">
               <Shield size={20} className="text-white" />
             </div>
             <div>
-              <span className="text-lg font-bold text-white">
-                GeoGuard<span className="text-cyan-400"> AI</span>
+              <span className="text-lg font-bold text-white font-display">
+                GeoGuard
               </span>
             </div>
+          </Link>
+
+          {/* Desktop Links (No Live Map link as requested) */}
+          <div className="hidden lg:flex items-center gap-8">
+            <a href="#what-we-do" className="text-[13px] text-text-secondary hover:text-text-primary font-display font-semibold tracking-wide transition-colors">WHAT WE DO</a>
+            <a href="#features" className="text-[13px] text-text-secondary hover:text-text-primary font-display font-semibold tracking-wide transition-colors">FEATURES</a>
+            <a href="#modules" className="text-[13px] text-text-secondary hover:text-text-primary font-display font-semibold tracking-wide transition-colors">MODULES</a>
+            <a href="#about" className="text-[13px] text-text-secondary hover:text-text-primary font-display font-semibold tracking-wide transition-colors">ABOUT</a>
+            <a href="#resources" className="text-[13px] text-text-secondary hover:text-text-primary font-display font-semibold tracking-wide transition-colors">RESOURCES</a>
           </div>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-slate-400 hover:text-white transition-colors">Features</a>
-            <a href="#modules" className="text-sm text-slate-400 hover:text-white transition-colors">Modules</a>
-            <a href="#stats" className="text-sm text-slate-400 hover:text-white transition-colors">Stats</a>
-            <Link to="/login" className="btn-secondary text-sm py-2 px-4">Sign In</Link>
-            <Link to="/app" className="btn-primary text-sm py-2 px-5">
-              Launch Platform <ArrowRight size={16} />
+
+          {/* Desktop Actions */}
+          <div className="hidden lg:flex items-center gap-3">
+            <Link
+              to="/login"
+              className="text-[13px] font-semibold text-text-secondary hover:text-text-primary font-display tracking-wider transition-colors px-4 py-2 rounded-md border border-white/[0.1] hover:border-white/[0.2]"
+            >
+              SIGN IN
             </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center px-6 grid-pattern">
-        {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          {/* Gradient Orbs */}
-          <div
-            className="absolute top-1/4 -left-32 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px] animate-float"
-            style={{ animationDelay: '0s' }}
-          />
-          <div
-            className="absolute bottom-1/4 -right-32 w-96 h-96 bg-cyan-500/10 rounded-full blur-[128px] animate-float"
-            style={{ animationDelay: '3s' }}
-          />
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-500/5 rounded-full blur-[128px]"
-          />
-
-          {/* Floating Particles */}
-          {floatingParticles.map((particle) => (
-            <motion.div
-              key={particle.id}
-              className="absolute rounded-full bg-cyan-500/20"
-              style={{
-                width: particle.size,
-                height: particle.size,
-                left: `${particle.x}%`,
-                top: `${particle.y}%`,
-              }}
-              animate={{
-                y: [-20, 20, -20],
-                x: [-10, 10, -10],
-                opacity: [0.2, 0.6, 0.2],
-              }}
-              transition={{
-                duration: particle.duration,
-                delay: particle.delay,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-            />
-          ))}
-
-          {/* Animated Ring */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="w-[500px] h-[500px] rounded-full border border-cyan-500/5 animate-rotate-slow" />
-            <div
-              className="absolute inset-8 rounded-full border border-blue-500/5 animate-rotate-slow"
-              style={{ animationDirection: 'reverse', animationDuration: '30s' }}
-            />
-            <div
-              className="absolute inset-16 rounded-full border border-purple-500/5 animate-rotate-slow"
-              style={{ animationDuration: '25s' }}
-            />
-          </div>
-        </div>
-
-        {/* Hero Content */}
-        <div className="relative z-10 text-center max-w-4xl mx-auto">
-          {/* Live Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 mb-8"
-          >
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-sm text-blue-300 font-medium">
-              AI-Powered Disaster Intelligence — Live
-            </span>
-            <Radio size={14} className="text-blue-400 animate-pulse" />
-          </motion.div>
-
-          {/* Title */}
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-5xl md:text-7xl font-black text-white leading-tight mb-6"
-          >
-            Predict. Protect.{' '}
-            <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent animate-gradient">
-              Save Lives.
-            </span>
-          </motion.h1>
-
-          {/* Subtitle */}
-          <motion.p
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-            className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            Hyperlocal disaster early warning platform powered by AI, satellite imagery, 
-            and citizen intelligence. Predict disasters before they strike, plan evacuations, 
-            and allocate resources — all in real-time.
-          </motion.p>
-
-          {/* CTA Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4"
-          >
             <Link
               to="/app"
-              className="btn-primary text-base px-8 py-3.5 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
-              id="cta-launch"
+              className="text-[13px] font-bold bg-accent-primary text-bg-primary px-5 py-2 rounded-md hover:bg-[#1de9bf] transition-all flex items-center gap-2 font-display tracking-wide"
             >
-              Launch Platform
-              <ArrowRight size={20} />
+              LAUNCH PLATFORM
+              <ArrowUpRight size={14} />
             </Link>
-            <Link
-              to="/app/map"
-              className="btn-secondary text-base px-8 py-3.5"
-              id="cta-map"
-            >
-              <Map size={20} />
-              View Live Map
-            </Link>
-          </motion.div>
+          </div>
 
-          {/* Stats Row */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.8 }}
-            className="flex flex-wrap items-center justify-center gap-8 mt-16"
-            id="stats"
+          {/* Mobile Menu Toggle */}
+          <button
+            className="lg:hidden p-2 text-text-secondary hover:text-text-primary"
+            onClick={() => setMobileMenu(!mobileMenu)}
+            aria-label="Toggle menu"
           >
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  <stat.icon size={18} className="text-cyan-400" />
-                  <span className="text-2xl md:text-3xl font-bold text-white">{stat.value}</span>
-                </div>
-                <span className="text-xs text-slate-500 uppercase tracking-wider">{stat.label}</span>
-              </div>
-            ))}
-          </motion.div>
+            {mobileMenu ? <X size={22} /> : <Menu size={22} />}
+          </button>
         </div>
 
-        {/* Scroll Indicator */}
-        <motion.div
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        >
-          <div className="w-6 h-10 rounded-full border-2 border-slate-600 flex items-start justify-center p-1.5">
-            <div className="w-1.5 h-2.5 bg-slate-400 rounded-full" />
+        {/* Mobile Menu */}
+        {mobileMenu && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="lg:hidden bg-bg-secondary/95 backdrop-blur-xl border-b border-white/[0.08] px-6 py-4 space-y-3"
+          >
+            <a href="#what-we-do" onClick={() => setMobileMenu(false)} className="block text-sm text-text-secondary hover:text-text-primary py-1.5 font-display font-semibold">WHAT WE DO</a>
+            <a href="#features" onClick={() => setMobileMenu(false)} className="block text-sm text-text-secondary hover:text-text-primary py-1.5 font-display font-semibold">FEATURES</a>
+            <a href="#modules" onClick={() => setMobileMenu(false)} className="block text-sm text-text-secondary hover:text-text-primary py-1.5 font-display font-semibold">MODULES</a>
+            <a href="#about" onClick={() => setMobileMenu(false)} className="block text-sm text-text-secondary hover:text-text-primary py-1.5 font-display font-semibold">ABOUT</a>
+            <a href="#resources" onClick={() => setMobileMenu(false)} className="block text-sm text-text-secondary hover:text-text-primary py-1.5 font-display font-semibold">RESOURCES</a>
+            <div className="pt-3 flex flex-col gap-2 border-t border-white/[0.08]">
+              <Link to="/login" className="btn-secondary text-sm py-2.5 justify-center font-display" onClick={() => setMobileMenu(false)}>SIGN IN</Link>
+              <Link to="/app" className="btn-primary text-sm py-2.5 justify-center font-display" onClick={() => setMobileMenu(false)}>LAUNCH PLATFORM <ArrowUpRight size={14} /></Link>
+            </div>
+          </motion.div>
+        )}
+      </nav>
+
+      {/* ═══════ HERO SECTION (SLIDE 1 - KEPT EXACTLY AS REQUESTED) ═══════ */}
+      <section className="relative min-h-screen flex items-center px-6 pt-20 pb-12 overflow-hidden">
+        {/* Background Effects */}
+        <div className="absolute inset-0 grid-pattern" />
+        <div className="absolute inset-0 topo-pattern" />
+
+        <div className="max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-12 lg:gap-8 items-center relative z-10">
+          {/* Left Content */}
+          <div className="max-w-xl">
+            {/* Status Badge */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-accent-primary/10 border border-accent-primary/20 mb-8"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-accent-primary animate-pulse" />
+              <span className="text-[11px] font-mono font-medium text-accent-primary tracking-wider uppercase">
+                SYSTEM OPERATIONAL
+              </span>
+            </motion.div>
+
+            {/* Headline */}
+            <motion.h1
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.15 }}
+              className="heading-display text-[clamp(2.5rem,5vw,4rem)] mb-6 tracking-tight leading-none"
+            >
+              EARLY WARNINGS.{'\n'}
+              BETTER DECISIONS.{'\n'}
+              <span className="text-accent-primary">SAFER</span> TOMORROW.
+            </motion.h1>
+
+            {/* Description */}
+            <motion.p
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+              className="text-text-secondary text-[15px] leading-relaxed mb-8 max-w-md"
+            >
+              GeoGuard AI uses advanced AI models, satellite data, and real-time analytics to predict disasters, alert communities, and support faster, smarter response.
+            </motion.p>
+
+            {/* CTAs */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.45 }}
+              className="flex flex-wrap gap-3"
+            >
+              <Link
+                to="/app"
+                className="btn-primary text-sm px-6 py-3 font-display tracking-wide font-bold"
+                id="cta-launch"
+              >
+                Launch Platform
+                <ArrowRight size={16} />
+              </Link>
+              <Link
+                to="/app/map"
+                className="btn-secondary text-sm px-6 py-3 font-display tracking-wide font-semibold"
+                id="cta-map"
+              >
+                <Map size={16} />
+                View Live Map
+              </Link>
+            </motion.div>
           </div>
-        </motion.div>
+
+          {/* Right - Rotating Earth Visualization */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1, delay: 0.2 }}
+            className="relative flex items-center justify-center"
+          >
+            {/* Rotating Earth Sphere Container */}
+            <div className="relative w-full max-w-[520px] aspect-square">
+              {/* Rotating Original Earth Image */}
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
+                className="relative w-full h-full rounded-full overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_80px_rgba(25,211,174,0.15)]"
+              >
+                <img
+                  src="/images/earth-hero.png"
+                  alt="Satellite view of Earth showing disaster monitoring"
+                  className="w-full h-full object-cover scale-105"
+                  loading="eager"
+                />
+              </motion.div>
+
+              {/* Atmospheric Glow Overlay */}
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{
+                  boxShadow: 'inset 0 0 60px rgba(25,211,174,0.12), inset 20px -20px 60px rgba(0,0,0,0.85), 0 0 80px rgba(25,211,174,0.08)'
+                }}
+              />
+
+              {/* Floating Risk Cards */}
+              {riskCards.map((card) => (
+                <div
+                  key={card.label}
+                  className={`absolute ${card.x} z-20`}
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.6, delay: 0.8 }}
+                    className="flex items-center gap-2.5 bg-surface/85 backdrop-blur-md border border-white/[0.1] rounded-md px-3 py-2 shadow-lg"
+                  >
+                    <card.icon size={16} className="text-text-muted" />
+                    <div>
+                      <p className="text-[11px] font-semibold text-text-primary leading-tight font-display">{card.label}</p>
+                      <p className="text-[10px] font-mono font-bold" style={{ color: card.color }}>{card.level}</p>
+                    </div>
+                    <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: card.color }} />
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-24 px-6 relative">
+      {/* ═══════ STATS BAR ═══════ */}
+      <section className="relative border-y border-white/[0.08] bg-surface/40">
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+            {[
+              { value: '12+', label: 'Disaster Types', sub: 'Monitored in real-time', icon: Layers },
+              { value: '< 3 min', label: 'Alert Delivery', sub: 'Average alert delivery time', icon: Zap },
+              { value: 'AI', label: 'Powered Models', sub: 'Deep learning & analytics', icon: Brain },
+              { value: '3', label: 'Languages', sub: 'Accessible for all', icon: Globe },
+            ].map((stat) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg border border-white/[0.1] bg-surface flex items-center justify-center shrink-0">
+                  <stat.icon size={18} className="text-accent-primary" />
+                </div>
+                <div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-text-primary font-display tracking-tight">{stat.value}</span>
+                  </div>
+                  <p className="text-xs font-bold text-text-secondary uppercase tracking-wider font-display">{stat.label}</p>
+                  <p className="text-[10px] font-mono text-text-muted">{stat.sub}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ WHAT WE DO ═══════ */}
+      <section className="py-24 px-6 relative" id="what-we-do">
         <div className="max-w-7xl mx-auto">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-16"
+            className="mb-14"
           >
-            <span className="text-sm text-cyan-400 font-semibold uppercase tracking-wider">Core Capabilities</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mt-3 mb-4">
-              Intelligence at Every Stage
+            <span className="section-label">WHAT WE DO</span>
+            <h2 className="heading-display text-3xl md:text-5xl mt-2 tracking-tight">
+              INTELLIGENCE THAT SAVES LIVES
             </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto text-lg">
-              From prediction to response — a unified platform covering the entire disaster lifecycle.
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {whatWeDo.map((item, i) => (
+              <motion.div
+                key={item.num}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+                className="group rounded-lg overflow-hidden border border-white/[0.1] bg-surface/60 hover:border-accent-primary/40 transition-all shadow-lg flex flex-col justify-between"
+              >
+                {/* Image */}
+                <div>
+                  <div className="relative h-40 overflow-hidden">
+                    <img
+                      src={item.img}
+                      alt={item.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-transparent" />
+                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded bg-bg-primary/80 border border-white/[0.1] text-[10px] font-mono font-bold text-accent-primary">
+                      {item.num}
+                    </div>
+                  </div>
+                  {/* Content */}
+                  <div className="p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <item.icon size={18} style={{ color: item.color }} />
+                      <h3 className="text-lg font-bold text-text-primary font-display tracking-tight">{item.title}</h3>
+                    </div>
+                    <p className="text-xs text-text-secondary leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+                <div className="px-5 pb-5 pt-2 flex items-center gap-2 text-accent-primary text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">
+                  <span>DISASTER OPERATIONAL MATRIX</span>
+                  <ArrowRight size={13} />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ REDESIGNED FEATURES SECTION ═══════ */}
+      <section id="features" className="py-24 px-6 bg-surface/30 border-y border-white/[0.08] relative">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-4"
+          >
+            <div>
+              <span className="section-label">CORE CAPABILITIES</span>
+              <h2 className="heading-display text-3xl md:text-5xl mt-2 tracking-tight">
+                MISSION-CRITICAL CAPABILITIES
+              </h2>
+            </div>
+            <p className="text-text-secondary text-sm max-w-md font-sans">
+              End-to-end disaster intelligence architecture built for emergency authorities, responders, and frontline communities.
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, i) => (
+            {features.map((f, i) => (
               <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 30 }}
+                key={f.title}
+                initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: i * 0.1 }}
-                className="glass-card p-6 group cursor-pointer"
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="p-6 rounded-lg border border-white/[0.1] bg-surface/70 hover:border-accent-primary/50 transition-all group relative overflow-hidden"
               >
-                <div
-                  className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform duration-300`}
-                  style={{ boxShadow: `0 8px 24px ${feature.color}30` }}
-                >
-                  <feature.icon size={24} className="text-white" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-10 h-10 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center group-hover:bg-accent-primary/20 transition-colors">
+                    <f.icon size={20} className="text-accent-primary" />
+                  </div>
+                  <span className="text-[10px] font-mono font-bold tracking-widest text-accent-primary bg-accent-primary/10 px-2.5 py-1 rounded border border-accent-primary/20">
+                    {f.tag}
+                  </span>
                 </div>
-                <h3 className="text-lg font-bold text-white mb-2">{feature.title}</h3>
-                <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
+                <h3 className="text-lg font-bold text-text-primary mb-2 font-display tracking-tight group-hover:text-accent-primary transition-colors">
+                  {f.title}
+                </h3>
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  {f.desc}
+                </p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Modules Section */}
-      <section id="modules" className="py-24 px-6 bg-bg-secondary/50">
+      {/* ═══════ REDESIGNED MODULES SECTION ═══════ */}
+      <section id="modules" className="py-24 px-6 relative">
         <div className="max-w-7xl mx-auto">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <span className="text-sm text-purple-400 font-semibold uppercase tracking-wider">Platform Modules</span>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mt-3 mb-4">
-              12 Integrated Modules
+            <span className="section-label">INTEGRATED MODULES</span>
+            <h2 className="heading-display text-3xl md:text-5xl mt-2 tracking-tight">
+              12 TACTICAL ECOSYSTEM MODULES
             </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto text-lg">
-              Each module works independently and together, creating a comprehensive disaster intelligence ecosystem.
+            <p className="text-text-secondary max-w-xl mx-auto text-sm mt-3">
+              Modular disaster management engines operating in real-time synchronization.
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[
-              { icon: Brain, label: 'Risk Prediction', num: '01' },
-              { icon: Activity, label: 'Flood Intelligence', num: '02' },
-              { icon: Satellite, label: 'Satellite Analysis', num: '03' },
-              { icon: Users, label: 'Citizen Reports', num: '04' },
-              { icon: Eye, label: 'Damage Assessment', num: '05' },
-              { icon: BarChart3, label: 'Impact Engine', num: '06' },
-              { icon: Navigation, label: 'Evacuation AI', num: '07' },
-              { icon: Building, label: 'Shelter Finder', num: '08' },
-              { icon: Truck, label: 'Resource Planner', num: '09' },
-              { icon: Zap, label: 'Explainable AI', num: '10' },
-              { icon: MessageSquare, label: 'AI Assistant', num: '11' },
-              { icon: Radio, label: 'Voice Emergency', num: '12' },
-            ].map((mod, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {modules.map((mod, i) => (
               <motion.div
                 key={mod.num}
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.95 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: i * 0.05 }}
-                className="glass-card p-5 text-center group cursor-pointer"
+                transition={{ duration: 0.35, delay: i * 0.04 }}
+                className="group p-5 rounded-lg border border-white/[0.1] bg-surface/60 hover:border-accent-primary/40 hover:bg-surface transition-all flex flex-col justify-between"
               >
-                <span className="text-[10px] font-mono text-slate-600 mb-2 block">{mod.num}</span>
-                <mod.icon size={28} className="mx-auto text-slate-400 group-hover:text-cyan-400 transition-colors mb-3" />
-                <span className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
-                  {mod.label}
-                </span>
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-mono font-bold text-accent-primary">{mod.num}</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent-primary/60 group-hover:bg-accent-primary animate-pulse" />
+                  </div>
+                  <mod.icon size={26} className="text-text-secondary group-hover:text-accent-primary transition-colors mb-3" />
+                  <h4 className="text-base font-bold text-text-primary font-display tracking-tight mb-1">
+                    {mod.label}
+                  </h4>
+                  <p className="text-xs text-text-muted leading-snug">
+                    {mod.desc}
+                  </p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[10px] font-mono text-text-muted">
+                  <span>STATUS</span>
+                  <span className="text-accent-primary font-bold">ONLINE</span>
+                </div>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-24 px-6 relative overflow-hidden">
-        <div className="absolute inset-0">
-          <div className="absolute top-0 left-1/3 w-96 h-96 bg-blue-500/5 rounded-full blur-[128px]" />
-          <div className="absolute bottom-0 right-1/3 w-96 h-96 bg-cyan-500/5 rounded-full blur-[128px]" />
+      {/* ═══════ REDESIGNED ABOUT SECTION ═══════ */}
+      <section id="about" className="py-24 px-6 bg-surface/30 border-y border-white/[0.08] relative">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            <motion.div
+              initial={{ opacity: 0, x: -16 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="section-label">ABOUT GEOGUARD AI</span>
+              <h2 className="heading-display text-3xl md:text-5xl mt-2 mb-6 tracking-tight">
+                AI-POWERED DISASTER INTELLIGENCE PLATFORM
+              </h2>
+              <p className="text-text-secondary text-sm leading-relaxed mb-5">
+                GeoGuard AI is an enterprise-grade disaster intelligence platform engineered to provide early warning, situational awareness, and emergency response optimization.
+              </p>
+              <p className="text-text-muted text-xs leading-relaxed mb-8">
+                Combining high-resolution satellite remote sensing, hydrodynamic flooding models, deep neural prediction pipelines, and real-time citizen report aggregation into a unified mission control interface.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'MISSION', desc: 'Democratize hyper-local disaster intelligence & early warnings' },
+                  { label: 'ENGINEERING', desc: 'XGBoost, LSTM, U-Net, SegFormer & A* spatial routing' },
+                  { label: 'LATENCY', desc: 'Sub-3 minute notification distribution engine' },
+                  { label: 'ACCESSIBILITY', desc: 'Multi-lingual support across English, Tamil & Hindi' },
+                ].map((item) => (
+                  <div key={item.label} className="p-4 rounded-md border border-white/[0.1] bg-surface/60">
+                    <p className="text-xs font-mono font-bold text-accent-primary tracking-widest mb-1.5">{item.label}</p>
+                    <p className="text-xs text-text-secondary leading-normal">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Right Tech Spec Matrix */}
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              className="relative"
+            >
+              <div className="rounded-lg border border-white/[0.1] bg-surface/80 p-7 shadow-xl space-y-5">
+                <div className="flex items-center gap-3 pb-4 border-b border-white/[0.08]">
+                  <div className="w-11 h-11 rounded-md bg-accent-primary/10 border border-accent-primary/30 flex items-center justify-center">
+                    <Shield size={22} className="text-accent-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-text-primary font-display tracking-tight">GEO GUARD AI</h3>
+                    <p className="text-[10px] font-mono text-accent-primary uppercase tracking-widest">DISASTER INTELLIGENCE PLATFORM</p>
+                  </div>
+                </div>
+
+                {[
+                  { label: 'PREDICTION ENGINE', val: 'Multi-Hazard XGBoost & LSTM Neural Pipeline' },
+                  { label: 'VISION ANALYTICS', val: 'Sentinel-1 & Sentinel-2 U-Net Segmentation' },
+                  { label: 'RESPONSE MATRIX', val: 'Automated Dispatch & Evacuation Routing' },
+                  { label: 'AUTHENTICATION', val: 'Firebase Enterprise & OAuth 2.0' },
+                  { label: 'COMMUNICATION', val: 'Real-Time Alert WebSockets & Push API' },
+                ].map((spec) => (
+                  <div key={spec.label} className="py-2 border-b border-white/[0.05] last:border-0">
+                    <p className="text-[10px] font-mono font-semibold text-text-muted tracking-widest">{spec.label}</p>
+                    <p className="text-xs font-bold text-text-primary font-display tracking-wide mt-0.5">{spec.val}</p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         </div>
+      </section>
+
+      {/* ═══════ REDESIGNED RESOURCES SECTION ═══════ */}
+      <section id="resources" className="py-24 px-6 relative">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <span className="section-label">RESOURCES & KNOWLEDGE</span>
+            <h2 className="heading-display text-3xl md:text-5xl mt-2 tracking-tight">
+              TACTICAL DOCUMENTATION & APIS
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {resources.map((r, i) => (
+              <motion.div
+                key={r.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="group p-6 rounded-lg border border-white/[0.1] bg-surface/60 hover:border-accent-primary/40 transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-10 h-10 rounded-md bg-accent-primary/10 border border-accent-primary/25 flex items-center justify-center">
+                      <r.icon size={20} className="text-accent-primary" />
+                    </div>
+                    <span className="text-[10px] font-mono font-bold text-text-muted tracking-wider">{r.category}</span>
+                  </div>
+                  <h4 className="text-base font-bold text-text-primary font-display tracking-tight mb-2 group-hover:text-accent-primary transition-colors">
+                    {r.title}
+                  </h4>
+                  <p className="text-xs text-text-secondary leading-relaxed">
+                    {r.desc}
+                  </p>
+                </div>
+                <div className="mt-5 pt-3 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono font-bold text-accent-primary">
+                  <span>ACCESS DOCS</span>
+                  <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ CTA SECTION ═══════ */}
+      <section className="py-24 px-6 relative border-t border-white/[0.08] bg-surface/30">
+        <div className="absolute inset-0 topo-pattern opacity-40" />
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
+          transition={{ duration: 0.7 }}
           className="max-w-3xl mx-auto text-center relative z-10"
         >
-          <h2 className="text-3xl md:text-5xl font-bold text-white mb-6">
-            Ready to Protect Your Community?
+          <h2 className="heading-display text-3xl md:text-5xl mb-4 tracking-tight">
+            READY TO PROTECT YOUR COMMUNITY?
           </h2>
-          <p className="text-lg text-slate-400 mb-10">
-            Join disaster management authorities, NGOs, and emergency responders using GeoGuard AI 
-            to make informed decisions and save lives.
+          <p className="text-sm text-text-secondary mb-8 max-w-lg mx-auto">
+            Join disaster management authorities, emergency responders, and NGOs leveraging GeoGuard AI for hyper-local early warnings and rapid command response.
           </p>
           <Link
             to="/app"
-            className="btn-primary text-lg px-10 py-4 shadow-xl shadow-blue-500/25"
+            className="btn-primary text-sm px-8 py-3.5 shadow-glow-teal font-display font-bold tracking-wide"
           >
-            Get Started Now
-            <ArrowRight size={22} />
+            LAUNCH PLATFORM NOW
+            <ArrowRight size={18} />
           </Link>
         </motion.div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-8 px-6">
+      {/* ═══════ FOOTER ═══════ */}
+      <footer className="border-t border-white/[0.08] py-8 px-6 bg-bg-primary">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
               <Shield size={16} className="text-white" />
             </div>
-            <span className="text-sm text-slate-400">
-              GeoGuard AI — Disaster Intelligence Platform
+            <span className="text-sm font-bold text-white font-display">
+              GeoGuard
             </span>
           </div>
-          <p className="text-sm text-slate-600">
-            © 2026 GeoGuard AI. Built with 🤖 AI for 🌍 humanity.
+          <div className="flex items-center gap-6">
+            <a href="#what-we-do" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">WHAT WE DO</a>
+            <a href="#features" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">FEATURES</a>
+            <a href="#modules" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">MODULES</a>
+            <a href="#about" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">ABOUT</a>
+            <a href="#resources" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">RESOURCES</a>
+          </div>
+          <p className="text-xs font-mono text-text-muted">
+            © 2026 GeoGuard. Built for humanity.
           </p>
         </div>
       </footer>
     </div>
   );
 }
-
-

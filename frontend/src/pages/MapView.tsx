@@ -932,9 +932,7 @@ export default function MapView() {
   // Map settings
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
   const [mapZoom, setMapZoom] = useState<number>(5);
-  const [mapProvider, setMapProvider] = useState<'leaflet' | 'google'>(
-    GMAPS_API_KEY && GMAPS_API_KEY !== 'YOUR_API_KEY_HERE' ? 'google' : 'leaflet'
-  );
+  const mapProvider = 'leaflet';
   const [mapRef, setMapRef] = useState<google.maps.Map | null>(null);
 
   useEffect(() => {
@@ -1538,38 +1536,9 @@ export default function MapView() {
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs text-slate-400 font-medium">
-              {mapProvider === 'leaflet' ? 'OSM & Leaflet' : 'Google Maps'} • Active
+              Leaflet & OSM • Active
             </span>
           </div>
-
-          {/* Map Provider Toggle */}
-          {GMAPS_API_KEY && GMAPS_API_KEY !== 'YOUR_API_KEY_HERE' && (
-            <>
-              <div className="w-px h-4 bg-white/10" />
-              <div className="flex gap-1 bg-white/5 p-0.5 rounded-lg">
-                <button
-                  onClick={() => setMapProvider('leaflet')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
-                    mapProvider === 'leaflet'
-                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md'
-                      : 'text-slate-400 hover:text-slate-300'
-                  }`}
-                >
-                  Leaflet
-                </button>
-                <button
-                  onClick={() => setMapProvider('google')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all ${
-                    mapProvider === 'google'
-                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-md'
-                      : 'text-slate-400 hover:text-slate-300'
-                  }`}
-                >
-                  Google
-                </button>
-              </div>
-            </>
-          )}
 
           <div className="w-px h-4 bg-white/10" />
           <span className="text-xs text-slate-400">

@@ -17,7 +17,7 @@ const RISK_GRADIENT: Record<string, string> = {
 };
 
 export default function EvacuationPage() {
-  const { user, predictions, shelters, evacuationRoutes, fetchPredictions, fetchShelters, fetchEvacuationRoutes, selectedLocation } = useAppStore();
+  const { user, predictions, shelters, evacuationRoutes, updateEvacuationRoute, fetchPredictions, fetchShelters, fetchEvacuationRoutes, selectedLocation } = useAppStore();
   const isAuthority = user?.role === 'authority' || user?.role === 'admin';
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
 
@@ -227,18 +227,66 @@ export default function EvacuationPage() {
                 ))}
               </div>
 
-              {/* Avoided Zones */}
-              {route.avoidedZones?.length > 0 && (
-                <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
-                  <p className="text-xs text-amber-400 font-semibold mb-2">
-                    ⚠️ Areas Avoided Along This Route:
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {route.avoidedZones.map((zone: string) => (
-                      <span key={zone} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                        🚫 {zone}
-                      </span>
-                    ))}
+              {/* Authority Route Control Panel */}
+              {isAuthority && matchingRoute && (
+                <div className="mt-4 pt-4 border-t border-white/10 p-3 rounded-xl bg-slate-900/80 border border-cyan-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                      <Shield size={14} /> Authority Route Status Control:
+                    </span>
+                    <span className="text-[10px] text-slate-400">ID: {matchingRoute.id}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Route Safety Status</label>
+                      <select
+                        value={matchingRoute.riskAlongRoute >= 80 ? 'blocked' : matchingRoute.riskAlongRoute >= 50 ? 'caution' : 'safe'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const newRisk = val === 'blocked' ? 90 : val === 'caution' ? 55 : 15;
+                          updateEvacuationRoute(matchingRoute.id, { riskAlongRoute: newRisk });
+                          toast.success(`Route status set to ${val.toUpperCase()}`);
+                        }}
+                        className="w-full bg-slate-950 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white font-bold"
+                      >
+                        <option value="safe">✅ CLEAR / SAFE</option>
+                        <option value="caution">⚠️ CAUTION - FLUDDED</option>
+                        <option value="blocked">🚫 BLOCKED / IMPASSABLE</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">Est. Travel Time (min)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={matchingRoute.estimatedTime || (matchingRoute as any).estimated_time_min || 25}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateEvacuationRoute(matchingRoute.id, { estimatedTime: val });
+                          toast.success(`Updated travel time to ${val} min`);
+                        }}
+                        className="w-full bg-slate-950 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-slate-400 mb-1">AI Recommendation</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curr = (matchingRoute as any).isRecommended ?? matchingRoute.isRecommended;
+                          updateEvacuationRoute(matchingRoute.id, { isRecommended: !curr });
+                          toast.success(!curr ? 'Route marked as Recommended' : 'Removed Recommendation');
+                        }}
+                        className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                          matchingRoute.isRecommended ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-slate-400 border border-white/10'
+                        }`}
+                      >
+                        {matchingRoute.isRecommended ? '✓ Recommended Route' : 'Mark Recommended'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

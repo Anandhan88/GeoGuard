@@ -20,26 +20,26 @@ import SatellitePage from './pages/SatellitePage';
 import WeatherPage from './pages/WeatherPage';
 import SettingsPage from './pages/SettingsPage';
 import HelpPage from './pages/HelpPage';
+import ResourcesPage from './pages/ResourcesPage';
 import { useAppStore } from './stores/useAppStore';
 import './index.css';
 
 function DashboardIndex() {
   const user = useAppStore((s) => s.user);
-  const isLoading = useAppStore((s) => s.isLoading);
-
-  if (isLoading || (!user && localStorage.getItem('geoguard_access_token'))) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
-      </div>
-    );
-  }
 
   if (user?.role === 'authority' || user?.role === 'admin') {
     return <Navigate to="/app/authority" replace />;
   }
 
-  return <Navigate to="/app/citizen" replace />;
+  if (user) {
+    return <Navigate to="/app/citizen" replace />;
+  }
+
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -77,6 +77,7 @@ export default function App() {
             <Route path="map" element={<MapView />} />
             <Route path="alerts" element={<AlertsPage />} />
             <Route path="shelters" element={<SheltersPage />} />
+            <Route path="resources" element={<ResourcesPage />} />
             <Route path="evacuation" element={<EvacuationPage />} />
             <Route path="assistant" element={<AIAssistantPage />} />
             <Route path="satellite" element={<SatellitePage />} />
