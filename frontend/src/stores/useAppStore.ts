@@ -662,10 +662,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await api.get('/reports');
       const rawList = res.data.reports || [];
+      const loc = get().selectedLocation;
+      const cityName = loc?.name ? loc.name.split(',')[0].trim() : 'Perundurai';
+
       const reportList = rawList.map((r: any) => {
-        let cleanAddress = r.address || 'Perundurai, Tamil Nadu';
-        if (cleanAddress.includes('Chennai') && r.location?.lat > 11.0 && r.location?.lat < 12.0) {
-          cleanAddress = cleanAddress.replace('Chennai', 'Perundurai, Tamil Nadu');
+        let cleanAddress = r.address || `${cityName}, Tamil Nadu`;
+        if (cleanAddress.includes('Chennai') && cityName !== 'Chennai') {
+          cleanAddress = cleanAddress.replace(/Chennai/g, `${cityName}, Tamil Nadu`);
         }
         return { ...r, address: cleanAddress };
       });
@@ -882,8 +885,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchCurrentWeather: async (lat?: number, lon?: number) => {
     const loc = get().selectedLocation;
-    const targetLat = lat ?? loc?.lat ?? 13.0827;
-    const targetLon = lon ?? loc?.lng ?? 80.2707;
+    const targetLat = lat ?? loc?.lat ?? 11.2715;
+    const targetLon = lon ?? loc?.lng ?? 77.6066;
     try {
       const res = await api.get(`/weather/current?lat=${targetLat}&lon=${targetLon}`);
       set({ currentWeather: res.data, weather: res.data });
@@ -896,8 +899,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchWeatherForecast: async (lat?: number, lon?: number) => {
     const loc = get().selectedLocation;
-    const targetLat = lat ?? loc?.lat ?? 13.0827;
-    const targetLon = lon ?? loc?.lng ?? 80.2707;
+    const targetLat = lat ?? loc?.lat ?? 11.2715;
+    const targetLon = lon ?? loc?.lng ?? 77.6066;
     try {
       const res = await api.get(`/weather/forecast?lat=${targetLat}&lon=${targetLon}`);
       set({ weatherForecast: res.data });

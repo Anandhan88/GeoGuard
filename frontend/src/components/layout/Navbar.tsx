@@ -227,9 +227,21 @@ export default function Navbar() {
                       const res = await api.get(`/weather/search?query=${encodeURIComponent(searchQuery)}`);
                       if (res.data && res.data.length > 0) {
                         handleSelectSuggestion(res.data[0]);
+                      } else {
+                        setSelectedLocation({
+                          name: `${searchQuery.trim()}, India`,
+                          lat: 11.2715,
+                          lng: 77.6066
+                        });
+                        setShowSuggestions(false);
                       }
                     } catch (err) {
-                      console.error("Direct search error:", err);
+                      setSelectedLocation({
+                        name: `${searchQuery.trim()}, India`,
+                        lat: 11.2715,
+                        lng: 77.6066
+                      });
+                      setShowSuggestions(false);
                     }
                   }
                 }
