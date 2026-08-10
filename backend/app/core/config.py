@@ -29,19 +29,26 @@ class Settings(BaseSettings):
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] | str | None = ["http://localhost:5173", "http://localhost:3000"]
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
+    def assemble_cors_origins(cls, v: str | list[str] | None) -> list[str]:
+        if v is None:
+            return ["*"]
         if isinstance(v, str):
-            if v.startswith("[") and v.endswith("]"):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
                 try:
-                    return json.loads(v)
+                    parsed = json.loads(v_str)
+                    if isinstance(parsed, list):
+                        return [str(item) for item in parsed]
                 except Exception:
                     pass
-            return [i.strip() for i in v.split(",") if i.strip()]
-        return v
+            if v_str == "*":
+                return ["*"]
+            return [i.strip() for i in v_str.split(",") if i.strip()]
+        return [str(item) for item in v]
     
     # External APIs
     OPENWEATHER_API_KEY: Optional[str] = None
