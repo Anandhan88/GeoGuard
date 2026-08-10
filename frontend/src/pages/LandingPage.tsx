@@ -115,7 +115,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group" aria-label="GeoGuard AI Home">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-shadow">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
               <Shield size={20} className="text-white" />
             </div>
             <div>
@@ -648,14 +648,14 @@ export default function LandingPage() {
       {/* ═══════ FOOTER ═══════ */}
       <footer className="border-t border-white/[0.08] py-8 px-6 bg-bg-primary">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+          <Link to="/" className="flex items-center gap-3 group hover:opacity-80 transition-opacity" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <Shield size={16} className="text-white" />
             </div>
             <span className="text-sm font-bold text-white font-display">
               GeoGuard
             </span>
-          </div>
+          </Link>
           <div className="flex items-center gap-6">
             <a href="#what-we-do" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">WHAT WE DO</a>
             <a href="#features" className="text-xs font-mono text-text-muted hover:text-text-secondary transition-colors">FEATURES</a>

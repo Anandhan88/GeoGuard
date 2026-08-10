@@ -270,7 +270,7 @@ export default function CitizenDashboard() {
               <Satellite size={18} />
             </div>
             <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Copernicus Status</p>
+              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Copernicus Status</p>
               <p className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
                 <span className={`w-1.5 h-1.5 rounded-full ${satStatus.status === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
                 {satStatus.status}
@@ -278,19 +278,19 @@ export default function CitizenDashboard() {
             </div>
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Last Scene Acquisition</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Last Scene Acquisition</p>
             <p className="text-xs font-semibold text-slate-300 mt-0.5">
               {satStatus.acquisition_time ? new Date(satStatus.acquisition_time).toLocaleString() : 'N/A'}
             </p>
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Flooded Area (SAR)</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Flooded Area (SAR)</p>
             <p className="text-xs font-bold text-blue-400 mt-0.5">
               {satStatus.flooded_area_km} km²
             </p>
           </div>
           <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Calculated Severity</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Calculated Severity</p>
             <p className="text-xs font-bold capitalize mt-0.5" style={{ color: SEVERITY_COLOR[satStatus.severity] || '#fff' }}>
               {satStatus.severity} Risk
             </p>
@@ -312,7 +312,7 @@ export default function CitizenDashboard() {
             <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} rounded-[16px] pointer-events-none`} />
             <div className="relative">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">{stat.label}</span>
+                <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">{stat.label}</span>
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ backgroundColor: `${stat.color}15` }}
@@ -334,8 +334,8 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-white">{t('rainfall_forecast')}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{t('actual_vs_predicted')}</p>
+                <h2 className="text-base font-semibold text-white">{t('rainfall_forecast')}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('actual_vs_predicted')}</p>
               </div>
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5">
@@ -381,8 +381,8 @@ export default function CitizenDashboard() {
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-white">{t('zones_at_risk')}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{t('command_center_sub')}</p>
+                <h2 className="text-base font-semibold text-white">{t('zones_at_risk')}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('command_center_sub')}</p>
               </div>
               <Link to="/app/map" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
                 {t('view_on_map')} <ChevronRight size={14} />
@@ -445,12 +445,12 @@ export default function CitizenDashboard() {
             
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-white/10 pb-4 relative z-10">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <span className="text-xl">🚤</span>
                   <span className="bg-gradient-to-r from-white via-cyan-200 to-blue-400 bg-clip-text text-transparent">
                     Emergency Fleet & Relief Supply Availability
                   </span>
-                </h3>
+                </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   Live rescue boats, ambulances, supply trucks, water purifiers, generators & NDRF teams in <span className="text-cyan-400 font-semibold">{selectedLocation?.name?.split(',')[0] || 'Your Area'}</span>.
                 </p>
@@ -582,7 +582,7 @@ export default function CitizenDashboard() {
         <div className="space-y-6">
           {/* Weather Widget */}
           <div className="glass-card-static p-6">
-            <h3 className="text-base font-semibold text-white mb-4">{t('current_weather')}</h3>
+            <h2 className="text-base font-semibold text-white mb-4">{t('current_weather')}</h2>
             <div className="text-center mb-4">
               <span className="text-5xl">{weather.icon}</span>
               <div className="mt-2">
@@ -594,39 +594,39 @@ export default function CitizenDashboard() {
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Droplets size={14} className="text-blue-400" />
                 <div>
-                  <p className="text-xs text-slate-500">{t('rainfall')}</p>
+                  <p className="text-xs text-slate-400">{t('rainfall')}</p>
                   <p className="text-sm font-semibold text-white">{weather.rainfall} mm</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Wind size={14} className="text-cyan-400" />
                 <div>
-                  <p className="text-xs text-slate-500">{t('wind')}</p>
+                  <p className="text-xs text-slate-400">{t('wind')}</p>
                   <p className="text-sm font-semibold text-white">{weather.windSpeed} km/h</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Thermometer size={14} className="text-amber-400" />
                 <div>
-                  <p className="text-xs text-slate-500">{t('humidity')}</p>
+                  <p className="text-xs text-slate-400">{t('humidity')}</p>
                   <p className="text-sm font-semibold text-white">{weather.humidity}%</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-lg bg-white/[0.03]">
                 <Activity size={14} className="text-purple-400" />
                 <div>
-                  <p className="text-xs text-slate-500">{t('pressure')}</p>
+                  <p className="text-xs text-slate-400">{t('pressure')}</p>
                   <p className="text-sm font-semibold text-white">{weather.pressure} hPa</p>
                 </div>
               </div>
             </div>
             {/* 5-day forecast */}
             <div className="mt-4 pt-4 border-t border-white/5">
-              <p className="text-xs text-slate-500 mb-2">{t('forecast_5day')}</p>
+              <p className="text-xs text-slate-400 mb-2">{t('forecast_5day')}</p>
               <div className="flex justify-between">
                 {weather.forecast?.map((day: any) => (
                   <div key={day.date} className="text-center">
-                    <p className="text-[10px] text-slate-500">{new Date(day.date).toLocaleDateString(lang, { weekday: 'short' })}</p>
+                    <p className="text-[10px] text-slate-400">{new Date(day.date).toLocaleDateString(lang, { weekday: 'short' })}</p>
                     <p className="text-lg my-1">{day.icon}</p>
                     <p className="text-xs text-slate-400">{day.rainfall}mm</p>
                   </div>
@@ -638,7 +638,7 @@ export default function CitizenDashboard() {
           {/* Nearby Shelters */}
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">{t('nearby_shelters')}</h3>
+              <h2 className="text-base font-semibold text-white">{t('nearby_shelters')}</h2>
               <Link to="/app/shelters" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
                 {t('view_all')} <ChevronRight size={14} />
               </Link>
@@ -651,11 +651,11 @@ export default function CitizenDashboard() {
                   <div key={shelter.id} className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium text-white truncate">{shelter.name}</h4>
-                      <span className="text-[10px] text-slate-500 shrink-0 ml-2">
+                      <span className="text-[10px] text-slate-400 shrink-0 ml-2">
                         {shelter.type.replace('_', ' ')}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1 truncate">{shelter.address}</p>
+                    <p className="text-xs text-slate-400 mt-1 truncate">{shelter.address}</p>
                     <div className="mt-2">
                       <div className="flex items-center justify-between text-xs mb-1">
                         <span className="text-slate-400">
@@ -686,7 +686,7 @@ export default function CitizenDashboard() {
           {/* Recent Reports */}
           <div className="glass-card-static p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">{t('recent_reports')}</h3>
+              <h2 className="text-base font-semibold text-white">{t('recent_reports')}</h2>
               <div className="flex items-center gap-2">
                 <span className="badge badge-info">{reports.length} {t('total')}</span>
                 <Link to="/app/citizen/report" className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">

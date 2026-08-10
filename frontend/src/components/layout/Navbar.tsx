@@ -169,21 +169,22 @@ export default function Navbar() {
         <div className="flex items-center gap-4">
           <button
             onClick={toggleSidebar}
+            aria-label="Toggle navigation sidebar"
             className="p-2 rounded-lg hover:bg-white/5 transition-colors"
             id="sidebar-toggle"
           >
             <Menu size={20} className="text-slate-400" />
           </button>
 
-          <Link to="/app" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:shadow-blue-500/40 transition-shadow">
+          <Link to="/" className="flex items-center gap-3 group" title="Return to Landing Page">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
               <Shield size={20} className="text-white" />
             </div>
             <div className="hidden md:block">
               <h1 className="text-base font-bold text-white leading-tight">
                 GeoGuard
               </h1>
-              <p className="text-[10px] text-slate-500 leading-tight">{t('disaster_intelligence')}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{t('disaster_intelligence')}</p>
             </div>
           </Link>
         </div>
@@ -192,6 +193,7 @@ export default function Navbar() {
         <div ref={searchRef} className="hidden lg:flex flex-1 max-w-lg mx-6 items-center gap-2 relative">
           <button
             type="button"
+            aria-label="Return to current location GPS"
             onClick={async () => {
               setSearchQuery('');
               setSuggestions([]);
@@ -257,7 +259,8 @@ export default function Navbar() {
                   setSelectedLocation(null);
                   setSearchQuery('');
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10"
+                aria-label="Clear selected location"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1.5 rounded-full hover:bg-white/10"
                 title="Clear selected location"
               >
                 <X size={14} />
@@ -481,6 +484,7 @@ export default function Navbar() {
                 setShowAlerts(false);
                 setShowLanguageDropdown(false);
               }}
+              aria-label="Open user profile menu"
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
               id="user-profile"
             >
@@ -489,7 +493,7 @@ export default function Navbar() {
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-white leading-tight">{currentUser.name}</p>
-                <p className="text-[10px] text-slate-500 capitalize">{currentUser.role}</p>
+                <p className="text-[10px] text-slate-400 capitalize">{currentUser.role}</p>
               </div>
               <ChevronDown size={14} className="text-slate-400 hidden md:block" />
             </button>

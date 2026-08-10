@@ -1,0 +1,12 @@
+# GeoGuard AI
+
+> GeoGuard AI is an enterprise-grade disaster early warning, impact assessment, and evacuation intelligence platform.
+
+## Documentation & Links
+
+- [Home Page](/)
+- [Citizen Platform](/app/citizen)
+- [Disaster Map](/app/map)
+- [Active Alerts](/app/alerts)
+- [Evacuation & Shelters](/app/shelters)
+- [AI Assistant](/app/assistant)

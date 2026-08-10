@@ -66,6 +66,7 @@ export default function Sidebar() {
       {/* Collapse Button */}
       <button
         onClick={toggleSidebar}
+        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
         className="absolute -right-3 top-6 w-6 h-6 rounded-full bg-bg-tertiary border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors z-50"
       >
         <ChevronLeft
@@ -87,7 +88,7 @@ export default function Sidebar() {
           return (
             <div key={section.key} className="mb-4">
               {sidebarOpen && (
-                <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3 mb-2">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3 mb-2">
                   {section.label}
                 </p>
               )}
@@ -148,11 +149,11 @@ export default function Sidebar() {
         <div className="p-4 border-t border-white/5">
           <div className="flex items-center gap-2 px-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-slate-500">{t('system_online')}</span>
+            <span className="text-xs text-slate-400">{t('system_online')}</span>
           </div>
           <div className="flex items-center gap-2 px-2 mt-1.5">
             <Radio size={12} className="text-cyan-400 animate-pulse" />
-            <span className="text-xs text-slate-500">{t('live_data')}</span>
+            <span className="text-xs text-slate-400">{t('live_data')}</span>
           </div>
         </div>
       )}
